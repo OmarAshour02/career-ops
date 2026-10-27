@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.17.0](https://github.com/career-ops-hq/career-ops/compare/web-v0.16.0...web-v0.17.0) (2026-10-27)
+
+
+### Features
+
+* **web:** undo a Skip or Applied from the Today decision cards ([#5769](https://github.com/career-ops-hq/career-ops/issues/5769)) ([47f236f](https://github.com/career-ops-hq/career-ops/commit/47f236f2fdfcdc2582ae3d7cccdf2ecd18471ddd))
+
+
+### Bug Fixes
+
+* **modes/tr:** write English report header labels and unfreeze is-ilani.md ([#3828](https://github.com/career-ops-hq/career-ops/issues/3828)) ([#5845](https://github.com/career-ops-hq/career-ops/issues/5845)) ([7d2588a](https://github.com/career-ops-hq/career-ops/commit/7d2588a0b0d30ef18f019bd78afd25195ef88ffb))
+* **rank:** run npm-installed agent CLIs on Windows ([#5787](https://github.com/career-ops-hq/career-ops/issues/5787)) ([1a03532](https://github.com/career-ops-hq/career-ops/commit/1a03532c65adea6f563fb9f8ebb0c3470aa29108))
+* remove evaluated jobs from the pending inbox ([#5906](https://github.com/career-ops-hq/career-ops/issues/5906)) ([b911da4](https://github.com/career-ops-hq/career-ops/commit/b911da438293af3396847ccba2be96319db7c21e))
+* **web/explore:** preserve posting dates when adding to pipeline ([#5690](https://github.com/career-ops-hq/career-ops/issues/5690)) ([b326f22](https://github.com/career-ops-hq/career-ops/commit/b326f22baa7ffce740a425e076df164137713c31))
+* **web:** a breakdown bucket nothing was submitted from shows no conversion rate ([#5875](https://github.com/career-ops-hq/career-ops/issues/5875)) ([1366774](https://github.com/career-ops-hq/career-ops/commit/136677488def5252b74fe73a3b98ac6eb3a47906))
+* **web:** declare the full NODE_ENGINES range in web's engines ([#5993](https://github.com/career-ops-hq/career-ops/issues/5993)) ([5ba0cda](https://github.com/career-ops-hq/career-ops/commit/5ba0cda1757ad0d2bf22e58058c04042abdf97c3))
+* **web:** do not cache a failed logo lookup as a permanent miss ([#5903](https://github.com/career-ops-hq/career-ops/issues/5903)) ([60b8800](https://github.com/career-ops-hq/career-ops/commit/60b88000bc9dd95e5921d05b44d356c149cf819b))
+* **web:** keep profile.yml comments on profile and cadence saves ([#5678](https://github.com/career-ops-hq/career-ops/issues/5678)) ([95813f3](https://github.com/career-ops-hq/career-ops/commit/95813f3fd4b8edf125047844f89c080bbd3feda8))
+* **web:** launch every remaining web child process without a console ([#5902](https://github.com/career-ops-hq/career-ops/issues/5902)) ([b802349](https://github.com/career-ops-hq/career-ops/commit/b802349868ca86b3c352af716d98ee16ffdc680c))
+* **web:** launch the six analytics routes with process.execPath and windowsHide ([#5900](https://github.com/career-ops-hq/career-ops/issues/5900)) ([91d0d07](https://github.com/career-ops-hq/career-ops/commit/91d0d07ba1978a17d3bc5c98d4fd1320c212fda4))
+* **web:** never overwrite an unreadable modes/_profile.md with a stub ([#5839](https://github.com/career-ops-hq/career-ops/issues/5839)) ([824dc51](https://github.com/career-ops-hq/career-ops/commit/824dc51b3f3c7935655f1fc254ff20a78f2a5ca9))
+* **web:** persist the Config CLI pick from an effect, not the setCliId updater ([#6034](https://github.com/career-ops-hq/career-ops/issues/6034)) ([2d6d83b](https://github.com/career-ops-hq/career-ops/commit/2d6d83b02c6a22652791a306c2a661ada884a6fa))
+* **web:** read Node's bracketed error code as a scan failure cause ([#5996](https://github.com/career-ops-hq/career-ops/issues/5996)) ([4814e80](https://github.com/career-ops-hq/career-ops/commit/4814e80cfd40776af7aa525bfbc6ae354ebcfb47))
+* **web:** recognise Chinese legitimacy tiers in the apply line and badge tone ([#5925](https://github.com/career-ops-hq/career-ops/issues/5925)) ([7383ee7](https://github.com/career-ops-hq/career-ops/commit/7383ee77abf520e8a1cd07980ce630abaaa95fa1))
+* **web:** refresh config consumers after same-tab saves ([#5807](https://github.com/career-ops-hq/career-ops/issues/5807)) ([a66df7f](https://github.com/career-ops-hq/career-ops/commit/a66df7fc78905da72c03a5379ac2cc871a317c1e))
+* **web:** resolve the A-H evaluation modes of modes/sg and modes/vi ([#5707](https://github.com/career-ops-hq/career-ops/issues/5707)) ([0f8f93a](https://github.com/career-ops-hq/career-ops/commit/0f8f93a1a20eda9f0d42abcc5e22cfe754dffc4c))
+* **web:** show the quality-threshold reasoning when the core recommends no cutoff ([#5876](https://github.com/career-ops-hq/career-ops/issues/5876)) ([43066a4](https://github.com/career-ops-hq/career-ops/commit/43066a48a5d9a59fe7ceeed52a1db217f76d5579))
+* **web:** state the project Node floor (22.13) in web's engines ([#5928](https://github.com/career-ops-hq/career-ops/issues/5928)) ([3f7a280](https://github.com/career-ops-hq/career-ops/commit/3f7a2802642d010797e667ac300672c174b57d91))
+
 ## [0.16.0](https://github.com/career-ops-hq/career-ops/compare/web-v0.15.0...web-v0.16.0) (2026-10-23)
 
 
