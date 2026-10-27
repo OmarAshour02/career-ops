@@ -266,6 +266,19 @@ export function roleFuzzyMatch(a, b) {
   const discriminating = overlap.filter(w => !BASELINE_TOKENS.has(w));
   if (discriminating.length === 0) return false;
 
+  // Two siblings under one shared base title each carry their own team or
+  // stack word: "Full-Stack Engineer (Backend Leaning) - Payments Engineering"
+  // vs "... - Platform Engineering", "Python Software Engineer, Commercial
+  // Systems" vs "Golang ...". The shared base is long enough to clear the
+  // Jaccard threshold, so the overlap alone merges them. When BOTH sides have
+  // tokens the other lacks and at least one of those is not baseline
+  // vocabulary, the titles name different openings. A one-sided extra stays a
+  // loose rewrite and is handled by the subset rule below.
+  const setA = new Set(wordsA);
+  const onlyA = wordsA.filter(w => !setB.has(w));
+  const onlyB = wordsB.filter(w => !setA.has(w));
+  if (onlyA.length > 0 && onlyB.length > 0 && [...onlyA, ...onlyB].some(w => !BASELINE_TOKENS.has(w))) return false;
+
   // A generic base title carries no suffix of its own to counterbalance a
   // specialized sibling's extra word, so the shared tokens alone can cross the
   // Jaccard threshold even though that extra word is exactly the signal that
