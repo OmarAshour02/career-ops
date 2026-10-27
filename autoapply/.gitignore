@@ -1,0 +1,15 @@
+# Local job-search data, browser sessions, credentials and model transcripts.
+attempts/
+results/
+outreach/
+profiles/
+screens/
+logs/
+summary-*.md
+inbox/
+sent/
+provider-block.json
+.*.lock
+*.lock/
+.nonstop.stop
+__pycache__/

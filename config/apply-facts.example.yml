@@ -1,0 +1,95 @@
+# Answer bank for auto-apply. Copy to config/apply-facts.yml (the desktop app's setup does this for you).
+# Workers answer forms ONLY from this file, config/profile.yml and cv.md. A required question with no
+# answer here makes the worker stop and list the question (see "Questions waiting" in the app).
+
+contact:
+  full_name: ""
+  first_name: ""
+  last_name: ""
+  email: ""
+  phone: ""                      # with country code, e.g. +44...
+  location: ""                   # "City, Country"
+  linkedin: ""
+  github: ""
+  website: ""
+
+work_authorization:
+  authorized_in: []              # countries you can work in without a visa
+  needs_sponsorship: true        # always answered truthfully
+  willing_to_relocate: true
+  remote_ok: true
+  skip_if_posting_says_no_sponsorship: true
+
+availability:
+  notice_period_days: 30
+  earliest_start: "30 days after offer"
+
+eeo:                             # voluntary self-ID; "Decline to self-identify" is fine
+  gender: "Decline to self-identify"
+  race_ethnicity: "Decline to self-identify"
+  hispanic_latino: "Decline to self-identify"
+  veteran: "I am not a protected veteran"
+  disability: "Decline to self-identify"
+  pronouns: ""
+
+# Annual gross. If a posting shows a range, use the upper-middle of it, never below floor.
+salary:
+  rule: "use city figure; if posted range exists, upper-middle of range; never below floor"
+  cities: {}                     # e.g. Berlin: { amount: 62000, currency: EUR, floor: 55000 }
+  remote_usd: { amount: 0, currency: USD, floor: 0 }
+  other_city: "unlisted city: if the posting gives a range, use the middle of it; no range -> skip and log the question"
+
+defaults:
+  how_did_you_hear: "Company careers page"
+  previously_worked_here: "No"
+  age_18_plus: "Yes"
+
+outreach:
+  max_emails_per_day: 25
+  seconds_between_emails: 120
+  follow_up_after_days: 5
+  max_follow_ups: 1
+  headline: ""                   # optional opening proof line for cold emails
+  headline_rule: ""
+  signoff: |-
+    Thanks,
+    Your Name
+  rules:
+    - 'Never invent numbers; every claim must be in cv.md.'
+  proof_points: []               # - text: "What you did, with a real number."  use_for: "For which companies."
+
+limits:
+  max_applications_per_day: 25
+  max_per_company_per_30_days: 2
+  min_score: 3.0
+
+profile:
+  title: "software engineer"     # how emails describe you
+  home_city: ""
+  home_country: ""
+  target_work: "software engineering work"
+  off_target: "roles far from your field"
+  voice: "simple plain English, short sentences, first person, friendly, direct"
+
+resume:
+  pdf: ""                        # path inside career-ops, e.g. output/master/resume.pdf
+  send_as: ""                    # file name the company sees
+
+# Your OK for the system to act alone. Empty = not allowed: live runs refuse to submit or send.
+consent:
+  auto_submit_since: ""
+  outreach_email_since: ""
+  cold_email_since: ""
+
+schedule:
+  run_at: "10:00"
+  cold_outreach: false
+
+# AI model per job (needs Claude Code installed and logged in).
+# prescore "auto" = free DeepSeek through opencode when installed, else Claude Haiku.
+models:
+  apply: claude-haiku-5-5
+  outreach: claude-haiku-5-5
+  inbox: claude-haiku-5-5
+  cv: claude-sonnet-5-5
+  prescore: auto
