@@ -7,7 +7,7 @@ career-ops helps you find and judge jobs with an AI CLI. This fork adds three th
   application form in a browser, and writes a short email to the recruiter.
 - **Inbox tracking.** It reads your Gmail, finds rejections, interview invites and offers,
   and moves each application to the right status, with the reason.
-- **A desktop app (macOS).** You can see every application with its status, the answers
+- **A desktop app (macOS and Linux).** You can see every application with its status, the answers
   given, the resume sent and screenshots, plus your outreach emails. You can change all of
   your settings in the app.
 
@@ -22,7 +22,7 @@ Not affiliated with or endorsed by the career-ops project.
 
 ## What you need
 
-- macOS (the desktop app and the daily schedule are macOS only; the scripts run anywhere)
+- macOS or Linux (Windows isn't supported yet)
 - [Node.js](https://nodejs.org) 22+ and Python 3
 - [Claude Code](https://claude.com/claude-code), installed and logged in. It does the work:
   it reads jobs, fills forms and writes emails, using your own Claude plan.
@@ -41,7 +41,7 @@ npx playwright install chromium        # the browser used to fill forms
 
 cd desktop
 npm install
-npm run install-app                    # puts "Career Ops" in ~/Applications
+npm run install-app                    # macOS: ~/Applications. Linux: your app menu
 ```
 
 Then fill in your details. There are two ways.
@@ -57,7 +57,8 @@ claude
 Set me up. Follow AI-SETUP.md. My resume is at ~/Downloads/resume.pdf
 ```
 
-**B. Use the app.** Open **Career Ops** from `~/Applications`. The first-run setup asks for
+**B. Use the app.** Open **Career Ops** (in `~/Applications` on macOS, in the app menu on Linux).
+The first-run setup asks for
 your details, email account, AI tools, resume PDF and permissions. You can add the rest
 later in Settings (answer bank, salary, outreach writing).
 
@@ -117,7 +118,9 @@ The auto-apply runner itself always uses Claude Code.
 
 ## How the daily run works
 
-`autoapply/daily.sh` runs once a day (you set the time in the app):
+`autoapply/daily.sh` runs once a day at the time you set in the app. On macOS that uses launchd.
+On Linux it uses a systemd user timer, or crontab if systemd isn't running. A day missed while the
+computer was off runs when it's back on (systemd and macOS).
 
 1. **Scan** job boards (Greenhouse, Lever, Ashby and the companies in `portals.yml`).
 2. **Fit check:** a cheap model reads each job and skips bad fits (too senior, wrong
@@ -152,7 +155,7 @@ All of these are gitignored. More details: [autoapply/README.md](autoapply/READM
   emails are separate switches.
 - **Limits:** applications per day, per company in 30 days, and emails per day.
 - **Pause any time:** turn off "Daily run" in the app. **Stop** ends a run that's going.
-- **Your data stays on your Mac.** It isn't uploaded anywhere except to the AI provider
+- **Your data stays on your computer.** It isn't uploaded anywhere except to the AI provider
   you use and the job sites you apply to.
 - **The inbox reader only reads**, and it treats email text as data, never as instructions.
 

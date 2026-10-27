@@ -8,8 +8,8 @@
   "main": "main.mjs",
   "scripts": {
     "start": "electron .",
-    "build": "electron-packager . 'Career Ops' --platform=darwin --arch=arm64 --out=dist --overwrite --icon=icon.icns --app-bundle-id=com.careerops.desktop --ignore='^/dist'",
-    "install-app": "npm run build && rm -rf ~/Applications/'Career Ops.app' && mkdir -p ~/Applications && cp -R 'dist/Career Ops-darwin-arm64/Career Ops.app' ~/Applications/"
+    "build": "node build.mjs",
+    "install-app": "node build.mjs --install"
   },
   "devDependencies": {
     "@electron/packager": "^18.3.6",

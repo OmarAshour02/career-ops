@@ -22,6 +22,9 @@ class MailTests(unittest.TestCase):
         self.root, self.out = root, out
         for name, value in [("ROOT", root), ("OUT", out), ("PDF", root / "absent.pdf")]:
             p = patch.object(mail, name, value); p.start(); self.addCleanup(p.stop)
+        # Fixed settings, so the tests never depend on the owner's config/apply-facts.yml.
+        facts = 'outreach_email_since: "2026-01-01"\ncold_email_since: "2026-01-01"\n'
+        p = patch.object(mail, "FACTS", facts); p.start(); self.addCleanup(p.stop)
         p = patch.object(mail, "env", return_value=("sender@example.com", "fake")); p.start(); self.addCleanup(p.stop)
         p = patch.object(mail, "email_check", return_value=(True, "mx ok")); p.start(); self.addCleanup(p.stop)
         p = patch.object(mail.time, "sleep"); self.sleep = p.start(); self.addCleanup(p.stop)

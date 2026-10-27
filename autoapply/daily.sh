@@ -3,7 +3,9 @@
 # Usage: autoapply/daily.sh [--dry-run]   (default: live)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
-export PATH="$HOME/.local/bin:$HOME/.nvm/versions/node/$(ls "$HOME/.nvm/versions/node" | sort -V | tail -1)/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+# Schedulers start with a bare PATH: add the usual Node/Claude/opencode homes (nvm, Homebrew, Linuxbrew) when present.
+NVM_BIN=$(ls -d "$HOME"/.nvm/versions/node/*/bin 2>/dev/null | sort -V | tail -1 || true)
+export PATH="$HOME/.local/bin:$HOME/.opencode/bin:${NVM_BIN:+$NVM_BIN:}/opt/homebrew/bin:/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin:/bin"
 MODE=--live; [[ "${1:-}" == --dry-run ]] && MODE=--dry-run
 TODAY=$(date -u +%F); LOG="autoapply/logs/daily-$TODAY.log"
 mkdir -p autoapply/logs

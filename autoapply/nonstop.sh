@@ -4,7 +4,9 @@
 # Usage: autoapply/nonstop.sh
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
-export PATH="$HOME/.local/bin:$HOME/.nvm/versions/node/$(ls "$HOME/.nvm/versions/node" | sort -V | tail -1)/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+# Schedulers start with a bare PATH: add the usual Node/Claude/opencode homes (nvm, Homebrew, Linuxbrew) when present.
+NVM_BIN=$(ls -d "$HOME"/.nvm/versions/node/*/bin 2>/dev/null | sort -V | tail -1 || true)
+export PATH="$HOME/.local/bin:$HOME/.opencode/bin:${NVM_BIN:+$NVM_BIN:}/opt/homebrew/bin:/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin:/bin"
 LOCK=autoapply/.workflow.lock
 mkdir "$LOCK" 2>/dev/null || { echo "already running"; exit 0; }
 trap 'rmdir "$LOCK"' EXIT

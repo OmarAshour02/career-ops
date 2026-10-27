@@ -35,7 +35,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "autoapply" / "outreach"
-FACTS = (ROOT / "config" / "apply-facts.yml").read_text()
+FACTS_PATH = ROOT / "config" / "apply-facts.yml"
+FACTS = FACTS_PATH.read_text() if FACTS_PATH.exists() else ""  # a fresh copy has no settings yet
 
 
 def fact_str(key, default=""):

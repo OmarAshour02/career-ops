@@ -1,18 +1,18 @@
 # Career Ops desktop
 
-A Mac app over career-ops auto-apply: every application with its status, answers, resume and
+A desktop app (macOS and Linux) over career-ops auto-apply: every application with its status, answers, resume and
 screenshots; status emails read from your inbox (rejections, interviews); outreach and cold outreach;
 and Settings for everything personal.
 
 ## Set up (new user)
 
-You need: macOS, Node 22+, Python 3, the [Claude Code](https://claude.com/claude-code) CLI (logged in),
+You need: macOS or Linux, Node 22+, Python 3, the [Claude Code](https://claude.com/claude-code) CLI (logged in),
 and a Gmail account with an [app password](https://myaccount.google.com/apppasswords).
 
 ```bash
 git clone https://github.com/OmarAshour02/career-ops.git ~/career-ops
 cd ~/career-ops && npm install
-cd desktop && npm install && npm run install-app     # puts "Career Ops" in ~/Applications
+cd desktop && npm install && npm run install-app     # macOS: ~/Applications · Linux: app menu
 ```
 
 Open **Career Ops**. The first-run setup asks for your details, email account, resume PDF and what the
@@ -35,10 +35,20 @@ answers to common form questions, so your first runs don't get stuck.
 | Gmail login, Hunter key | `.env` |
 | Resume facts | `cv.md` |
 | Resume PDF | `output/master/…` (Settings → Resume) |
-| Daily run | `~/Library/LaunchAgents/com.careerops.daily.plist` (Settings → Run controls) |
+| Daily run | macOS: `~/Library/LaunchAgents/com.careerops.daily.plist` · Linux: `~/.config/systemd/user/careerops-daily.timer` or a crontab line (Settings → Run controls) |
 
-The `.app` is only a launcher: it loads `desktop/` from your career-ops folder, so code changes show up
+The installed app is only a launcher: it loads `desktop/` from your career-ops folder, so code changes show up
 on the next start. Rebuild (`npm run install-app`) only after changing `main.mjs` or `preload.cjs`.
 
 Dev check: `CO_SNAPSHOT=/tmp/shots CO_SNAPSHOT_STEPS=overview,apps:resume,settings:run npx electron .`
 saves a PNG of each view and quits.
+
+## Linux notes
+
+- `npm run install-app` copies the app to `~/.local/opt/career-ops-desktop/` and adds **Career Ops**
+  to your app menu (`~/.local/share/applications/career-ops.desktop`).
+- If it doesn't open and you see a "SUID sandbox helper" error, run the two `sudo` commands that
+  `npm run install-app` prints. They give Electron's sandbox helper the rights it needs.
+- The daily run uses a systemd **user** timer. It runs while you're logged in. To run it even when
+  you're logged out, run `loginctl enable-linger $USER` once.
+- CAPTCHA alerts use `notify-send` (package `libnotify-bin` on Debian/Ubuntu).

@@ -1,5 +1,5 @@
 // Settings for the window: read and write config/apply-facts.yml (comments kept), .env, the resume PDF,
-// the pause file and the daily launchd job.
+// the pause file and the daily job (launchd on macOS; a systemd user timer, or crontab, on Linux).
 import { readFileSync, writeFileSync, existsSync, copyFileSync, mkdirSync, statSync, renameSync, unlinkSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
 import { homedir } from 'node:os';
@@ -10,6 +10,8 @@ import { MODEL_DEFAULTS } from '../autoapply/profile.mjs';
 const FACTS = 'config/apply-facts.yml', EXAMPLE = 'config/apply-facts.example.yml';
 const LABEL = 'com.careerops.daily', OLD_LABELS = ['com.omar.autoapply'];
 const agentPath = (label) => join(homedir(), 'Library/LaunchAgents', `${label}.plist`);
+const UNIT = 'careerops-daily', CRON_TAG = '# careerops-daily';
+const unitDir = () => join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'systemd/user');
 
 function atomicWrite(p, text) {
   mkdirSync(dirname(p), { recursive: true });
@@ -106,6 +108,7 @@ export function setPaused(root, paused) {
 }
 
 function scheduleState() {
+  if (process.platform === 'linux') return linuxScheduleState();
   if (process.platform !== 'darwin') return { supported: false };
   for (const label of [LABEL, ...OLD_LABELS]) {
     const p = agentPath(label);
@@ -119,7 +122,8 @@ function scheduleState() {
 
 // Write the daily launchd job (and retire the old hand-made one) so daily.sh runs at `time` (HH:MM), or remove it.
 export function applySchedule(root, time) {
-  if (process.platform !== 'darwin') throw new Error('Scheduling works on macOS only.');
+  if (process.platform === 'linux') return applyLinuxSchedule(root, time);
+  if (process.platform !== 'darwin') throw new Error('Scheduling works on macOS and Linux only.');
   const uid = process.getuid();
   const unload = (label) => { try { execFileSync('launchctl', ['bootout', `gui/${uid}/${label}`], { stdio: 'ignore' }); } catch { /* not loaded */ } };
   for (const label of [LABEL, ...OLD_LABELS]) { unload(label); if (existsSync(agentPath(label))) unlinkSync(agentPath(label)); }
@@ -145,6 +149,67 @@ export function applySchedule(root, time) {
 </plist>
 `);
   execFileSync('launchctl', ['bootstrap', `gui/${uid}`, agentPath(LABEL)]);
+  saveFacts(root, { 'schedule.run_at': time });
+  return readSettings(root);
+}
+
+// ---------- Linux: systemd user timer, or crontab where systemd --user isn't running ----------
+const hasSystemdUser = () => { try { execFileSync('systemctl', ['--user', 'show-environment'], { stdio: 'ignore' }); return true; } catch { return false; } };
+const crontabLines = () => { try { return execFileSync('crontab', ['-l'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean); } catch { return []; } };
+const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
+
+// The unit files and cron line for `time` (HH:MM). Persistent=true runs a missed day once the computer is back on.
+export function linuxSchedule(root, time) {
+  const [h, m] = time.split(':').map(Number);
+  const hh = String(h).padStart(2, '0'), mm = String(m).padStart(2, '0');
+  const script = join(root, 'autoapply/daily.sh');
+  return {
+    service: `[Unit]\nDescription=Career Ops daily auto-apply run\n\n[Service]\nType=oneshot\nWorkingDirectory=${root}\nExecStart=/bin/bash "${script}"\n`,
+    timer: `[Unit]\nDescription=Career Ops daily run at ${hh}:${mm}\n\n[Timer]\nOnCalendar=*-*-* ${hh}:${mm}:00\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n`,
+    cron: `${m} ${h} * * * /bin/bash ${shq(script)} >> ${shq(join(root, 'autoapply/logs/cron.out'))} 2>&1 ${CRON_TAG}`,
+  };
+}
+
+function linuxScheduleState() {
+  const timer = join(unitDir(), `${UNIT}.timer`);
+  if (existsSync(timer)) {
+    const t = readFileSync(timer, 'utf8').match(/OnCalendar=\*-\*-\* (\d\d):(\d\d)/);
+    return { supported: true, installed: true, label: `${UNIT}.timer`, time: t ? `${t[1]}:${t[2]}` : null };
+  }
+  const line = crontabLines().find((l) => l.endsWith(CRON_TAG));
+  if (line) {
+    const [m, h] = line.split(/\s+/);
+    return { supported: true, installed: true, label: 'crontab', time: `${h.padStart(2, '0')}:${m.padStart(2, '0')}` };
+  }
+  return { supported: true, installed: false };
+}
+
+function applyLinuxSchedule(root, time) {
+  const systemd = hasSystemdUser();
+  const timer = join(unitDir(), `${UNIT}.timer`), service = join(unitDir(), `${UNIT}.service`);
+  if (existsSync(timer) || existsSync(service)) {
+    if (systemd) try { execFileSync('systemctl', ['--user', 'disable', '--now', `${UNIT}.timer`], { stdio: 'ignore' }); } catch { /* not enabled */ }
+    for (const p of [timer, service]) if (existsSync(p)) unlinkSync(p);
+    if (systemd) execFileSync('systemctl', ['--user', 'daemon-reload']);
+  }
+  const cron = crontabLines();
+  const setCron = (lines) => execFileSync('crontab', ['-'], { input: lines.length ? `${lines.join('\n')}\n` : '' });
+  if (cron.some((l) => l.endsWith(CRON_TAG))) setCron(cron.filter((l) => !l.endsWith(CRON_TAG)));
+  if (!time) return readSettings(root);
+  const [h, m] = time.split(':').map(Number);
+  if (!(h >= 0 && h < 24 && m >= 0 && m < 60)) throw new Error('Use a time like 10:00.');
+  const s = linuxSchedule(root, time);
+  if (systemd) {
+    atomicWrite(service, s.service);
+    atomicWrite(timer, s.timer);
+    execFileSync('systemctl', ['--user', 'daemon-reload']);
+    execFileSync('systemctl', ['--user', 'enable', '--now', `${UNIT}.timer`]);
+  } else {
+    try { execFileSync('crontab', ['-l'], { stdio: 'ignore' }); } catch (e) {
+      if (e.code === 'ENOENT') throw new Error('No systemd user session and no crontab. Install cron (cronie) to schedule the daily run.');
+    }
+    setCron([...crontabLines().filter((l) => !l.endsWith(CRON_TAG)), s.cron]);
+  }
   saveFacts(root, { 'schedule.run_at': time });
   return readSettings(root);
 }

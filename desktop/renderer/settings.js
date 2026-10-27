@@ -170,7 +170,7 @@ function tabRun() {
   return card('Auto-apply', `
     <div class="field"><label>Daily run</label><label class="switch"><input type="checkbox" data-s-toggle="pause" ${S.paused ? '' : 'checked'}><span></span></label><div class="hint">${S.paused ? 'Stopped: daily runs do nothing.' : 'Running.'}</div></div>
     <div class="field"><label>Run every day at</label><div style="display:flex;gap:6px"><input id="run-at" type="time" value="${esc(sc.time || get('schedule.run_at') || '10:00')}"><button class="btn small" data-s-act="schedule-save">${sc.installed ? 'Update' : 'Turn on'}</button>${sc.installed ? '<button class="btn small" data-s-act="schedule-off">Remove</button>' : ''}</div>
-      <div class="hint">${sc.supported === false ? 'Scheduling works on macOS only.' : sc.installed ? `Scheduled at ${esc(sc.time)} (${esc(sc.label)}).` : 'Not scheduled.'} Your Mac must be awake.</div></div>
+      <div class="hint">${sc.supported === false ? 'Scheduling works on macOS and Linux only.' : sc.installed ? `Scheduled at ${esc(sc.time)} (${esc(sc.label)}).` : 'Not scheduled.'} Your computer must be on (a missed day runs when it's back on).</div></div>
     ${field('Cold outreach', 'schedule.cold_outreach', { type: 'bool', hint: 'Emails companies you did not apply to.' })}
     <div class="field wide" id="run-now"><label>Run now</label><div class="hint">Checking…</div></div>`, { saveId: 'cold' })
   + card('AI models', `<div class="field wide" id="ai-status"><div class="hint">Checking Claude Code and opencode…</div></div>` + [

@@ -3,5 +3,9 @@
 # Usage: autoapply/captcha-alert.sh "<company>" "<role>"
 company=${1:-a job}; role=${2:-}
 msg="CAPTCHA at $company${role:+ ($role)}. Solve it in that browser window within 3 min, or ignore it."
-osascript -e "display notification \"${msg//\"/}\" with title \"Auto-apply needs you\" sound name \"Glass\"" >/dev/null 2>&1 &
+if command -v osascript >/dev/null 2>&1; then
+  osascript -e "display notification \"${msg//\"/}\" with title \"Auto-apply needs you\" sound name \"Glass\"" >/dev/null 2>&1 &
+elif command -v notify-send >/dev/null 2>&1; then
+  notify-send -u critical "Auto-apply needs you" "$msg" >/dev/null 2>&1 &
+fi
 exit 0

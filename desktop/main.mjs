@@ -13,7 +13,7 @@ const prefs = (() => { try { return JSON.parse(readFileSync(PREFS, 'utf8')); } c
 const isRoot = (dir) => existsSync(join(dir, 'autoapply/runner.mjs')) && existsSync(join(dir, 'desktop/renderer/index.html'));
 const ROOT = resolve(process.env.CAREER_OPS_ROOT || prefs.root || join(homedir(), 'career-ops'));
 const ROOT_OK = isRoot(ROOT);
-const PATH = [join(homedir(), '.local/bin'), join(homedir(), '.opencode/bin'), '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(':');
+const PATH = [join(homedir(), '.local/bin'), join(homedir(), '.opencode/bin'), '/opt/homebrew/bin', '/home/linuxbrew/.linuxbrew/bin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(':');
 const STATES = ['Applied', 'Responded', 'Interview', 'Offer', 'Rejected', 'Discarded'];
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'co', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }]);
@@ -80,7 +80,8 @@ async function stopRun() {
 function createWindow() {
   win = new BrowserWindow({
     width: 1440, height: 900, minWidth: 980, minHeight: 620, title: 'Career Ops',
-    titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 16, y: 18 },
+    // macOS draws its window buttons inside the sidebar; Linux keeps the normal title bar and hides the menu bar.
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 16, y: 18 } } : { autoHideMenuBar: true, icon: join(app.getAppPath(), 'icon.png') }),
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#2F243A' : '#F5F2F1',
     webPreferences: { preload: ROOT_OK ? join(ROOT, 'desktop/preload.cjs') : join(app.getAppPath(), 'preload.cjs'), contextIsolation: true, sandbox: true, plugins: true },
   });

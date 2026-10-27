@@ -242,7 +242,8 @@ Optional dry run (nothing is submitted or sent; it uses a little of their Claude
 ```
 
 Then ask the user to open the app (`cd desktop && npm run install-app` the first time,
-then open **Career Ops** from `~/Applications`), and look over Settings.
+then open **Career Ops** from `~/Applications` on macOS or the app menu on Linux), and look
+over Settings.
 
 ---
 
