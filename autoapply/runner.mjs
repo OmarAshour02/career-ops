@@ -9,6 +9,7 @@ import { parseTrackerRow, resolveColumns, extractTrackerReportNumbers } from '..
 import { attemptRecords, atomicJson, readJson, jobId, normalizeUrl, runProcess, validateResult, eligibleAttempt, STOP_FAILURES, isMail } from './runtime.mjs';
 import { prescore as defaultPrescore } from './prescore.mjs';
 import { loadFacts, promptValues, resumePath, consentFor } from './profile.mjs';
+import { isMainModule } from '../lib/is-main-module.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ROOT = dirname(HERE);
@@ -356,4 +357,4 @@ export async function main(args = process.argv.slice(2)) {
     if (batch.blocked && batch.blocked !== 'daily_cap') process.exitCode = 75;
   } finally { process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop); }
 }
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(e => { console.error(e.message); process.exitCode = 1; });
+if (isMainModule(import.meta.url)) main().catch(e => { console.error(e.message); process.exitCode = 1; });

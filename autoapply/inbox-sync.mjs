@@ -228,7 +228,7 @@ function fetchMail(afterUid, since) {
   return JSON.parse(execFileSync('python3', args, { cwd: ROOT, encoding: 'utf8', maxBuffer: 200 * 1024 * 1024, timeout: 900_000 }));
 }
 
-function assign(uid, reportNum) {
+function assignEvent(uid, reportNum) {
   const events = readJson(EVENTS, []);
   const ev = events.find((e) => String(e.uid) === String(uid));
   if (!ev) throw new Error(`no event with uid ${uid}`);
@@ -245,7 +245,7 @@ function assign(uid, reportNum) {
 }
 
 async function main(argv) {
-  if (argv[0] === 'assign') return assign(argv[1], argv[2]);
+  if (argv[0] === 'assign') return assignEvent(argv[1], argv[2]);
   const flag = (k) => argv.includes(k), val = (k, d) => (argv.includes(k) ? argv[argv.indexOf(k) + 1] : d);
   const dry = flag('--dry-run'), noAi = flag('--no-ai'), model = val('--model', modelFor(loadFacts(ROOT), 'inbox'));
   mkdirSync(DIR, { recursive: true });

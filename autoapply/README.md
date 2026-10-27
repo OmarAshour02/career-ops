@@ -159,7 +159,7 @@ logs are not silently mixed into these new metrics.
 ## Offline validation
 
 ```sh
-node --test autoapply/runner.test.mjs
+node --test tests/autoapply/*.test.mjs
 python3 -I autoapply/mail_test.py
 ```
 

@@ -20,7 +20,7 @@ const read = p => existsSync(join(ROOT, p)) ? readFileSync(join(ROOT, p), 'utf8'
 const norm = s => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
 
 // Same title gates as prefilter.mjs.
-const ATS = /jobs\.ashbyhq\.com|greenhouse\.io|gh_jid=|jobs\.lever\.co|apply\.workable\.com|jobs\.smartrecruiters\.com|\.recruitee\.com|\.bamboohr\.com/i;
+const ATS = /jobs\.ashbyhq\.com|greenhouse\.io|gh_jid=|jobs\.(eu\.)?lever\.co|apply\.workable\.com|jobs\.smartrecruiters\.com|\.recruitee\.com|\.bamboohr\.com/i;
 const TOO_SENIOR = /\b(staff|principal|lead|manager|director|head|vp|chief|architect|distinguished|fellow|phd|intern(ship)?|working student|werkstudent|apprentice|trainee)\b/i;
 const OFF_TARGET = /\b(sales|account|marketing|recruit|designer|legal|finance|analyst|scientist|researcher|support|consultant|solutions engineer|ios|android|mobile|frontend|front-end|qa|test)\b/i;
 

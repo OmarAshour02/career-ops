@@ -6,8 +6,9 @@
 //   node autoapply/hunter.mjs find <domain> <first> <last>
 //   node autoapply/hunter.mjs verify <email>
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isMainModule } from '../lib/is-main-module.mjs';
 
 const ROOT = process.env.AUTOAPPLY_ROOT || dirname(dirname(fileURLToPath(import.meta.url)));
 const API = 'https://api.hunter.io/v2';
@@ -47,7 +48,7 @@ export async function hunter(kind, args, { key = apiKey(), fetchFn = fetch } = {
   return { exit: 1, out: { error: 'verification still pending' } };
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMainModule(import.meta.url)) {
   const [kind, ...args] = process.argv.slice(2);
   const { exit, out } = await hunter(kind, args);
   console.log(JSON.stringify(out)); process.exitCode = exit;

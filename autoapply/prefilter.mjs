@@ -41,7 +41,7 @@ const addRole = (company, title, location) => seenRoles.set(norm(company), [...(
 const facts = existsSync(join(ROOT, 'config/apply-facts.yml')) ? read('config/apply-facts.yml') : '';
 const PER_COMPANY = Number((facts.match(/max_per_company_per_30_days:\s*(\d+)/) || [])[1] ?? 5);
 
-const ATS = /jobs\.ashbyhq\.com|greenhouse\.io|gh_jid=|jobs\.lever\.co|apply\.workable\.com|jobs\.smartrecruiters\.com|\.recruitee\.com|\.bamboohr\.com/i;
+const ATS = /jobs\.ashbyhq\.com|greenhouse\.io|gh_jid=|jobs\.(eu\.)?lever\.co|apply\.workable\.com|jobs\.smartrecruiters\.com|\.recruitee\.com|\.bamboohr\.com/i;
 const TOO_SENIOR = /\b(staff|principal|lead|manager|director|head|vp|chief|architect|distinguished|fellow|phd|intern(ship)?|working student|werkstudent|apprentice|trainee)\b/i;
 const OFF_TARGET = /\b(sales|account|marketing|recruit|designer|legal|finance|analyst|scientist|researcher|support|consultant|solutions engineer|ios|android|mobile|frontend|front-end|qa|test)\b/i;
 

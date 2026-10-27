@@ -14,7 +14,7 @@ const num = (key, dflt) => Number((facts.match(new RegExp(`${key}:\\s*([\\d.]+)`
 const MIN_SCORE = num('min_score', 3.5);
 const COMPANY_DAYS = num('max_per_company_per_30_days', 1) ? 30 : 0;
 
-const ATS = [/greenhouse\.io|gh_jid=/i, /jobs\.lever\.co/i, /jobs\.ashbyhq\.com/i, /apply\.workable\.com/i, /jobs\.smartrecruiters\.com/i, /\.recruitee\.com/i, /\.bamboohr\.com/i];
+const ATS = [/greenhouse\.io|gh_jid=/i, /jobs\.(eu\.)?lever\.co/i, /jobs\.ashbyhq\.com/i, /apply\.workable\.com/i, /jobs\.smartrecruiters\.com/i, /\.recruitee\.com/i, /\.bamboohr\.com/i];
 const norm = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
 
 const blacklist = existsSync(join(ROOT, 'data/blacklist.md'))

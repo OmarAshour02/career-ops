@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-import { resolve, dirname } from 'node:path';
+import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { attemptRecords, TOKEN_KEYS } from './runtime.mjs';
+import { isMainModule } from '../lib/is-main-module.mjs';
 
 export function usageSummary(root, { day = new Date().toISOString().slice(0, 10), mode = 'live' } = {}) {
   const records = attemptRecords(root).filter(r => r.started_at?.startsWith(day) && r.mode === mode);
@@ -38,7 +39,7 @@ export function formatUsage(summary) {
   }
   return lines.join('\n');
 }
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMainModule(import.meta.url)) {
   const args = process.argv.slice(2);
   const dateIndex = args.indexOf('--day');
   const summary = usageSummary(process.env.AUTOAPPLY_ROOT || dirname(dirname(fileURLToPath(import.meta.url))), { day: dateIndex < 0 ? undefined : args[dateIndex + 1], mode: args.includes('--dry-run') ? 'dry-run' : 'live' });
