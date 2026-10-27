@@ -8,6 +8,7 @@ logs/
 summary-*.md
 inbox/
 sent/
+accounts.tsv
 provider-block.json
 .*.lock
 *.lock/

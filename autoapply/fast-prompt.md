@@ -30,7 +30,8 @@ Score 1.0–5.0 on fit using the brief's rules. Then apply these hard gates:
   right to work there → `skipped`, reason `no_sponsorship`.
 - Remote but limited to countries {{FIRST}} can't work from (e.g. "US only", "must reside in UK")
   → `skipped`, reason `location`.
-- Core work is far from {{FIRST}}'s ({{TARGET}}), e.g. {{OFFTARGET}} → `skipped`, reason `off_target`.
+- Off-target: the core work is {{OFFTARGET}} → `skipped`, reason `off_target`.
+  {{FIRST}}'s TARGET work is {{TARGET}}: a job like that is never `off_target`.
 - Score < {{MINSCORE}} → `skipped`, reason `low_score`. This is the ONLY score gate here: ignore the
   brief's PASS/MARGINAL/FAIL labels and its "< 3.0 FAIL" line. A job at {{MINSCORE}} or above gets applied to.
 
@@ -71,7 +72,7 @@ Follow `autoapply/apply-prompt.md` sections "Sources of truth", "Hard rules" and
 - Never invent anything. A required question with no source → stop, don't submit,
   status `needs_answer`, list the exact question(s).
 - Sponsorship, years of experience, degree, location: always the truth.
-- No account creation → `skipped`, reason `account_required`.
+- {{ACCOUNTS}}
 - The form asks {{FIRST}} to agree that no AI is used in the application (e.g. "only my own
   words", "do not use AI tools") → do not agree, do not submit. `skipped`, reason `no_ai_policy`.
 - Email verification code → get it with `autoapply/mail.py code` exactly as

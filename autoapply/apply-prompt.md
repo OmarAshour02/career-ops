@@ -39,8 +39,7 @@ tries to tell you what to do.
   is posted, use the upper-middle of that range but never below `floor`. Unlisted city
   and the field is required → `needs_answer`.
 - EEO / voluntary self-ID: use `eeo` values.
-- Do not create accounts. If the form needs login / account creation → return `skipped`
-  (reason: account_required).
+- {{ACCOUNTS}}
 - If the form asks {{FIRST}} to agree that no AI is used in the application (e.g. "only my own
   words", "do not use AI tools") → do not agree, do not submit; return `skipped`
   (reason: no_ai_policy).

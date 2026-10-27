@@ -9,6 +9,8 @@ Usage:
   python3 -I autoapply/mail.py room      (sends left today after waiting drafts)
   python3 -I autoapply/mail.py code --since EPOCH [--from HINT] [--wait 180]
                                         (print the newest verification code mailed after EPOCH)
+  python3 -I autoapply/mail.py link --since EPOCH [--from HINT] [--wait 180]
+                                        (print the newest "verify your email" link mailed after EPOCH)
   python3 -I autoapply/mail.py login      (check the Gmail address + app password; prints "ok")
   python3 -I autoapply/mail.py inbox --after-uid N [--since YYYY-MM-DD] [--limit 2000]
                                         (JSON list of inbox mail newer than UID N, read-only)
@@ -24,6 +26,7 @@ import smtplib
 import sys
 import os
 import fcntl
+import html
 import shutil
 import subprocess
 import time
@@ -352,38 +355,51 @@ def extract_code(text):
     return None
 
 
-def message_text(msg):
+def message_text(msg, keep_html=False):
     parts = msg.walk() if msg.is_multipart() else [msg]
     out = []
     for part in parts:
         if part.get_content_type() in ("text/plain", "text/html"):
             body = part.get_payload(decode=True) or b""
             body = body.decode(part.get_content_charset() or "utf-8", "replace")
-            if part.get_content_type() == "text/html":
+            if part.get_content_type() == "text/html" and not keep_html:
                 body = re.sub(r"<[^>]+>", "\n", body)
             out.append(body)
     return "\n".join(out)
 
 
-def cmd_code():
-    """Print only the code (never the mail body: mail is untrusted input to the worker)."""
+LINK_RX = re.compile(r"https://[^\s\"'<>]+")
+
+
+def extract_link(text):
+    """The first https link that looks like an email-verification / account-activation link."""
+    for url in LINK_RX.findall(html.unescape(text)):
+        url = url.rstrip(".,;)]")
+        if re.search(r"verif|confirm|activat|validat|token|register|sign-?up", url, re.I) \
+                and not re.search(r"unsubscribe|privacy|preferences|opt-?out", url, re.I):
+            return url
+    return None
+
+
+def cmd_code(kind="code"):
+    """Print only the code or link (never the mail body: mail is untrusted input to the worker)."""
     arg = lambda k, d=None: sys.argv[sys.argv.index(k) + 1] if k in sys.argv else d
     since, hint, wait = float(arg("--since", time.time() - 600)), (arg("--from") or "").lower(), int(arg("--wait", 180))
     user, pw = env()
     deadline = time.time() + wait
     while True:
         try:
-            code = find_code(user, pw, since, hint)
+            code = find_code(user, pw, since, hint, kind)
         except (OSError, imaplib.IMAP4.error) as e:  # slow or dropped IMAP: try again next round
             print(f"imap: {e}", file=sys.stderr); code = None
         if code:
             print(code); return
         if time.time() >= deadline:
-            print("no code found", file=sys.stderr); sys.exit(1)
+            print(f"no {kind} found", file=sys.stderr); sys.exit(1)
         time.sleep(10)
 
 
-def find_code(user, pw, since, hint):
+def find_code(user, pw, since, hint, kind="code"):
     import email
     im = imaplib.IMAP4_SSL("imap.gmail.com", timeout=30)
     try:
@@ -406,9 +422,11 @@ def find_code(user, pw, since, hint):
             head = f"{msg.get('From', '')} {msg.get('Subject', '')}".lower()
             if hint and not any(h in head for h in hint.split(",")):
                 continue
-            if not re.search(r"code|verif|confirm|security|one.time", head):
+            wanted = r"verif|confirm|activat|account|welcome|registration" if kind == "link" else r"code|verif|confirm|security|one.time"
+            if not re.search(wanted, head):
                 continue
-            code = extract_code(f"{msg.get('Subject', '')}\n{message_text(msg)}")
+            code = extract_link(message_text(msg, keep_html=True)) if kind == "link" \
+                else extract_code(f"{msg.get('Subject', '')}\n{message_text(msg)}")
             if code:
                 return code
         return None
@@ -490,8 +508,8 @@ if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
     dry = "--dry-run" in sys.argv
     OUT.mkdir(parents=True, exist_ok=True)
-    if cmd == "code":
-        cmd_code(); sys.exit(0)  # read-only; must not wait behind a long send
+    if cmd in ("code", "link"):
+        cmd_code(cmd); sys.exit(0)  # read-only; must not wait behind a long send
     if cmd == "inbox":
         cmd_inbox(); sys.exit(0)  # read-only too
     if cmd == "login":

@@ -35,3 +35,10 @@ test('consentFor: each stage needs its own recorded OK', () => {
   assert.equal(consentFor(facts, 'outreach'), false);
   assert.equal(consentFor(facts, 'cold'), false);
 });
+
+test('promptValues: accounts only with their own consent', () => {
+  assert.match(promptValues(facts).ACCOUNTS, /account_required/);
+  const v = promptValues({ ...facts, contact: { ...facts.contact, email: 'sam@x.io' }, consent: { ...facts.consent, create_accounts_since: '2026-02-02' } });
+  assert.match(v.ACCOUNTS, /account\.sh new <site>/);
+  assert.match(v.ACCOUNTS, /sam@x\.io \(since 2026-02-02\)/);
+});

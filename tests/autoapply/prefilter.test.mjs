@@ -7,11 +7,12 @@ import { execFileSync } from 'node:child_process';
 
 const PREFILTER = join(import.meta.dirname, '../../autoapply/prefilter.mjs');
 
-function queue(t, { pipeline, tracker = [], results = [], prescored = [], perCompany = 5, location = () => 'Remote' }) {
+function queue(t, { pipeline, tracker = [], results = [], prescored = [], perCompany = 5, location = () => 'Remote', extraFacts = '', portals = '' }) {
   const root = mkdtempSync(join(tmpdir(), 'prefilter-test-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   for (const d of ['data', 'config', 'autoapply/results']) mkdirSync(join(root, d), { recursive: true });
-  writeFileSync(join(root, 'config/apply-facts.yml'), `limits:\n  max_per_company_per_30_days: ${perCompany}\n`);
+  writeFileSync(join(root, 'config/apply-facts.yml'), `limits:\n  max_per_company_per_30_days: ${perCompany}\n${extraFacts}`);
+  if (portals) writeFileSync(join(root, 'portals.yml'), portals);
   writeFileSync(join(root, 'data/pipeline.md'), pipeline.map(([url, company, title]) => `- [ ] ${url} | ${company} | ${title} | ${location(title)} | posted: 2026-10-19`).join('\n') + '\n');
   const today = new Date().toISOString().slice(0, 10);
   writeFileSync(join(root, 'data/applications.md'), tracker.map(([n, company, role, status]) => `| ${n} | ${today} | ${company} | ${role} | 3/5 | ${status} | ✅ | [${n}](reports/${n}.md) | |`).join('\n') + '\n');
@@ -113,4 +114,27 @@ test('guest-apply ATS sites are queued, other sites are not', t => {
     ['https://www.arbeitnow.com/jobs/companies/x/backend-engineer-1', 'X', 'Backend Engineer'],
   ] });
   assert.deepEqual(got.map(([c]) => c).sort(), ['Acme', 'Hugging Face', 'Instabug', 'Synapse Analytics']);
+});
+
+test('account sites (Workday, own career sites) are queued only after account consent', t => {
+  const pipeline = [
+    ['https://acme.wd5.myworkdayjobs.com/External/job/Berlin/Backend-Engineer_R1', 'acme', 'Backend Engineer'],
+    ['https://careers.bigco.com/job/42', 'bigco', 'Platform Engineer'],
+    ['https://www.linkedin.com/jobs/view/1', 'other', 'Software Engineer'],
+  ];
+  const portals = 'tracked_companies:\n  - name: bigco\n    careers_url: https://careers.bigco.com/search\n';
+  assert.deepEqual(queue(t, { pipeline, portals }), []);
+  const got = queue(t, { pipeline, portals, extraFacts: 'consent:\n  create_accounts_since: "2026-10-28"\n' });
+  assert.deepEqual(got.map(([c]) => c), ['acme', 'bigco']);
+});
+
+test('big companies get their own higher per-company cap', t => {
+  const pipeline = [1, 2, 3, 4].flatMap((i) => [
+    [`https://jpmc.fa.oraclecloud.com/job/${i}`, 'JPMorgan Chase', `Software Engineer ${['Payments', 'Kafka', 'Cloud', 'Data'][i - 1]}`],
+    [`https://jobs.lever.co/small/${i}`, 'small', `Software Engineer ${['Payments', 'Kafka', 'Cloud', 'Data'][i - 1]}`],
+  ]);
+  const extraFacts = '  max_per_big_company_per_30_days: 3\n  big_companies: [JPMorgan Chase]\nconsent:\n  create_accounts_since: "2026-10-28"\n';
+  const got = queue(t, { perCompany: 1, pipeline, extraFacts });
+  assert.equal(got.filter(([c]) => c === 'JPMorgan Chase').length, 3);
+  assert.equal(got.filter(([c]) => c === 'small').length, 1);
 });

@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 // Fast-lane queue: pending URLs in data/pipeline.md -> cheap filters, zero tokens.
-// Keeps: Greenhouse/Lever/Ashby/Workable/SmartRecruiters/Recruitee/BambooHR, non-staff titles, not blacklisted, at most
-// PER_COMPANY applications per company per 30 days and per run, newest first.
+// Keeps: Greenhouse/Lever/Ashby/Workable/SmartRecruiters/Recruitee/BambooHR (plus account sites such as Workday,
+// iCIMS and companies' own career sites once consent.create_accounts_since is set), non-staff titles, not blacklisted, at most
+// PER_COMPANY applications per company per 30 days and per run (big companies: their own cap), newest first.
 import { readFileSync, existsSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import * as yaml from 'js-yaml';
 import { roleFuzzyMatch } from '../role-matcher.mjs';
 import { attemptRecords, normalizeUrl } from './runtime.mjs';
 
@@ -40,10 +42,26 @@ const seenRole = (company, title, location) => (seenRoles.get(norm(company)) || 
 const addRole = (company, title, location) => seenRoles.set(norm(company), [...(seenRoles.get(norm(company)) || []), baseTitle(title, location)]);
 const facts = existsSync(join(ROOT, 'config/apply-facts.yml')) ? read('config/apply-facts.yml') : '';
 const PER_COMPANY = Number((facts.match(/max_per_company_per_30_days:\s*(\d+)/) || [])[1] ?? 5);
+// Big companies (limits.big_companies) get their own, higher cap: many separate hiring teams.
+let limitsYaml = {};
+try { limitsYaml = yaml.load(facts)?.limits || {}; } catch {}
+const BIG = new Set((limitsYaml.big_companies || []).map(norm));
+const capFor = (c) => (BIG.has(c) ? Number(limitsYaml.max_per_big_company_per_30_days ?? PER_COMPANY) : PER_COMPANY);
 
 const ATS = /jobs\.ashbyhq\.com|greenhouse\.io|gh_jid=|jobs\.(eu\.)?lever\.co|apply\.workable\.com|jobs\.smartrecruiters\.com|\.recruitee\.com|\.bamboohr\.com/i;
+// Sites that need an account to apply: only once the owner allowed the bot to make accounts.
+const ACCOUNT_ATS = /\.myworkdayjobs\.com|\.icims\.com|amazon\.jobs|successfactors\.|\.oraclecloud\.com|\.eightfold\.ai|\.taleo\.net|\.avature\.net|\.jibeapply\.com|\.csod\.com/i;
+const accountsOk = /^\s*create_accounts_since:\s*"?\d{4}-\d\d-\d\d/m.test(facts);
+// A tracked company's own career site (careers.allianz.com...) is its apply form too.
+const hostOf = (u) => { try { return new URL(u).hostname.toLowerCase(); } catch { return ''; } };
+const ownHosts = new Set();
+try {
+  for (const c of yaml.load(read('portals.yml'))?.tracked_companies || []) if (c.enabled !== false) ownHosts.add(hostOf(c.careers_url || c.api));
+} catch {}
+ownHosts.delete('');
+const applyable = (url) => ATS.test(url) || (accountsOk && (ACCOUNT_ATS.test(url) || ownHosts.has(hostOf(url))));
 const TOO_SENIOR = /\b(staff|principal|lead|manager|director|head|vp|chief|architect|distinguished|fellow|phd|intern(ship)?|working student|werkstudent|apprentice|trainee)\b/i;
-const OFF_TARGET = /\b(sales|account|marketing|recruit|designer|legal|finance|analyst|scientist|researcher|support|consultant|solutions engineer|ios|android|mobile|frontend|front-end|qa|test)\b/i;
+const OFF_TARGET = /\b(sales|account|marketing|recruit|designer|legal|finance|analyst|scientist|researcher|support|consultant|solutions engineer|ios|android|mobile|flutter|react native|frontend|front-end|qa|test)\b/i;
 
 const blacklist = existsSync(join(ROOT, 'data/blacklist.md'))
   ? read('data/blacklist.md').split('\n').filter((l) => l.startsWith('| ') && !l.includes('---'))
@@ -78,7 +96,7 @@ for (const line of read('data/pipeline.md').split('\n')) {
   const m = line.match(/^- \[ \] (\S+) \| ([^|]+) \| ([^|]+)(?: \| ([^|]*?))?(?: \| posted: (\S+))?\s*$/);
   if (!m) continue;
   const [, url, company, title, location = '', posted = ''] = m.map((x) => (x ?? '').trim());
-  if (!ATS.test(url) || seenUrls.has(urlKey(url)) || seenRole(company, title, location)) continue;
+  if (!applyable(url) || seenUrls.has(urlKey(url)) || seenRole(company, title, location)) continue;
   if (TOO_SENIOR.test(title) || OFF_TARGET.test(title)) continue;
   if (blacklist.includes(norm(company))) continue;
   addRole(company, title, location);
@@ -87,7 +105,7 @@ for (const line of read('data/pipeline.md').split('\n')) {
 jobs.sort((a, b) => (b.posted || '').localeCompare(a.posted || ''));
 const out = jobs.filter((j) => {
   const c = norm(j.company), n = recent.get(c) || 0;
-  if (n >= PER_COMPANY) return false;
+  if (n >= capFor(c)) return false;
   recent.set(c, n + 1);
   return true;
 });

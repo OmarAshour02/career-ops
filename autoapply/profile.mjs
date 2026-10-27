@@ -34,6 +34,7 @@ export function promptValues(facts) {
     SUBMITOK: consent.auto_submit_since || 'NOT GIVEN',
     EMAILOK: consent.outreach_email_since || 'NOT GIVEN',
     COLDOK: consent.cold_email_since || 'NOT GIVEN',
+    EMAIL: c.email || '',
     SIGNOFF: JSON.stringify(String(o.signoff || `Thanks,\n${c.full_name || ''}`)).slice(1, -1),
     HEADLINE: o.headline
       ? `Lead proof point, one short line: "${o.headline}"\n     ${o.headline_rule || 'Say exactly that.'} Then one proof point from cv.md.`
@@ -41,6 +42,7 @@ export function promptValues(facts) {
     POINTS: points.length ? `     Pick the one that fits the company best:\n${points.join('\n')}` : '     Pick the strongest one with a real number.',
     RULES: list(o.rules).map((r) => `- ${r}`).join('\n'),
   };
+  v.ACCOUNTS = consent.create_accounts_since ? accountRules(v, consent.create_accounts_since) : 'No account creation, no sign-in -> `skipped` (reason: account_required).';
   v.TITLECAP = v.TITLE.charAt(0).toUpperCase() + v.TITLE.slice(1);
   const sponsor = facts.work_authorization?.needs_sponsorship !== false;
   v.VISA = sponsor
@@ -48,6 +50,23 @@ export function promptValues(facts) {
     : 'mention location only if the posting makes it matter.';
   v.AUTHLINE = sponsor ? `${v.FIRST} is authorized only in ${v.AUTHIN} and needs sponsorship elsewhere.` : `${v.FIRST} is authorized to work in ${v.AUTHIN}.`;
   return v;
+}
+
+// How a worker gets past a "sign in / create account" wall, once the owner allowed accounts.
+function accountRules(v, since) {
+  return `Account or sign-in needed (Workday, iCIMS, Amazon, SuccessFactors, a company's own site): ${v.FIRST} allowed
+  making job-site accounts with ${v.EMAIL} (since ${since}). <site> = the hostname of the page that asks you to sign in.
+  1. Run \`autoapply/account.sh get <site>\`. It prints a password -> sign in with ${v.EMAIL} and that password.
+  2. Exit 1 (no account yet) -> create one: email ${v.EMAIL}, password from \`autoapply/account.sh new <site>\`
+     (same value in both password boxes). Name, phone and country from config/apply-facts.yml. Accept only the
+     terms/privacy boxes the site requires; leave job alerts, newsletters and marketing boxes unchecked.
+  3. Email check: a code -> \`mail.py code\` as described below. A link -> run \`date +%s\` right before the click
+     that sends it, then \`python3 -I autoapply/mail.py link --since <that number> --from "<words from the site or company, lowercase, comma-separated>"\`
+     and open the printed URL in the browser, then go back to the job and sign in. Nothing printed -> \`skipped\` (reason: account_required).
+  4. The saved password fails, or the site says an account with this email already exists and \`get\` had no password
+     -> do NOT reset the password. \`skipped\` (reason: account_exists).
+  5. SMS / phone codes, security questions or anything with no source -> \`needs_answer\`.
+  6. Type the password only into the site's password boxes. Never write it in the report, the result file or any other file.`;
 }
 
 // AI model per job. prescore 'auto' = free DeepSeek through opencode when installed, else Claude Haiku.

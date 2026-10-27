@@ -61,6 +61,8 @@ outreach:
 limits:
   max_applications_per_day: 25
   max_per_company_per_30_days: 2
+  max_per_big_company_per_30_days: 10 # companies in big_companies (many separate hiring teams)
+  big_companies: []
   min_score: 3.0
 
 profile:
@@ -80,6 +82,7 @@ consent:
   auto_submit_since: ""
   outreach_email_since: ""
   cold_email_since: ""
+  create_accounts_since: ""     # make job-site accounts (Workday, iCIMS...) with your email; passwords go in your Mac Keychain
 
 schedule:
   run_at: "10:00"

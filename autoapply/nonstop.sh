@@ -13,7 +13,7 @@ trap 'rmdir "$LOCK"' EXIT
 
 while [[ ! -f autoapply/.nonstop.stop ]]; do
   echo "===== $(date) cycle ====="
-  if OUT=$(./autoapply/run-fast.sh --live --parallel 4 --limit 400 --max-daily-attempts 400 --max-prescore 600 --max-turns 60 --prescore --model claude-haiku-5-5 2>&1); then
+  if OUT=$(./autoapply/run-fast.sh --live --parallel 4 --limit 400 --max-daily-attempts 400 --max-prescore 600 --max-turns 200 --timeout-ms 1500000 --prescore --model claude-haiku-5-5 2>&1); then
     echo "$OUT"
   else
     code=$?; echo "$OUT"; echo "Runner halted (exit $code); inspect provider-block.json and attempt records."

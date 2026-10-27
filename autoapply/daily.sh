@@ -20,7 +20,7 @@ echo "===== $(date) daily run ($MODE) ====="
 echo "--- scan (curated portals)";  node scan.mjs | tail -3
 echo "--- scan (all GH/Lever/Ashby boards, last 30 days)"
 node scan-ats-full.mjs --ats greenhouse,lever,ashby --since 30 | tail -3
-echo "--- fast lane";   ./autoapply/run-fast.sh $MODE --parallel 4 --limit 400 --max-daily-attempts 400 --max-prescore 600 --max-turns 60 --prescore --model "$(node autoapply/profile.mjs model apply)" || echo "fast lane halted (exit $?); continuing"
+echo "--- fast lane";   ./autoapply/run-fast.sh $MODE --parallel 4 --limit 400 --max-daily-attempts 400 --max-prescore 600 --max-turns 200 --timeout-ms 1500000 --prescore --model "$(node autoapply/profile.mjs model apply)" || echo "fast lane halted (exit $?); continuing"
 echo "--- resumes";     node autoapply/snapshot-resumes.mjs || echo "resume snapshot failed (exit $?); continuing"
 echo "--- replies";     [[ $MODE != --live ]] || python3 -I autoapply/mail.py check || echo "mail check failed (exit $?); continuing"
 echo "--- inbox";       [[ $MODE != --live ]] || node autoapply/inbox-sync.mjs || echo "inbox sync failed (exit $?); continuing"

@@ -121,5 +121,16 @@ class ValidityTests(unittest.TestCase):
             self.assertIsNone(mail.email_check("a@x.com")[0])
 
 
+class LinkTests(unittest.TestCase):
+    def test_verify_link_is_picked_over_other_links(self):
+        body = ('<a href="https://acme.wd5.myworkdayjobs.com/privacy">Privacy</a>'
+                '<a href="https://acme.wd5.myworkdayjobs.com/en-US/careers/activate/abc123?redirect=x&amp;y=1">Verify</a>'
+                '<a href="https://x.com/unsubscribe?token=1">Unsubscribe</a>')
+        self.assertEqual(mail.extract_link(body), "https://acme.wd5.myworkdayjobs.com/en-US/careers/activate/abc123?redirect=x&y=1")
+
+    def test_no_link_when_only_unsubscribe(self):
+        self.assertIsNone(mail.extract_link("Hi https://x.com/unsubscribe?confirm=1 bye"))
+
+
 if __name__ == "__main__":
     unittest.main()

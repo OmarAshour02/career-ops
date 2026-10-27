@@ -191,7 +191,7 @@ function tabRun() {
   + card('Permissions', [
     field('Submit applications for me', 'consent.auto_submit_since', { type: 'consent' }),
     field('Email people about my applications', 'consent.outreach_email_since', { type: 'consent' }),
-    field('Cold-email companies', 'consent.cold_email_since', { type: 'consent' }),
+    field('Cold-email companies', 'consent.cold_email_since', { type: 'consent' }), field('Make job-site accounts for me', 'consent.create_accounts_since', { type: 'consent' }),
   ].join('') + '<div class="field wide"><div class="hint">Without these, live runs only prepare drafts and fill forms in dry-run. Nothing is sent or submitted.</div></div>', { saveId: 'consent', hint: 'What the system may do alone' });
 }
 
@@ -367,7 +367,7 @@ function wizardStep() {
     <div class="field wide"><label>CV text (cv.md)</label><textarea id="cv-text" rows="14" spellcheck="false" class="mono" placeholder="Choose your PDF and the text is read from it. You can also paste it here.">${esc(S.cv)}</textarea></div></div>`;
   return `<h2>What may it do alone?</h2><p class="lead">Nothing is submitted or sent until you allow it. You can change these any time.</p>
     <div class="fields">${[field('Submit applications for me', 'consent.auto_submit_since', { type: 'consent' }), field('Email people about my applications', 'consent.outreach_email_since', { type: 'consent' }),
-      field('Cold-email companies', 'consent.cold_email_since', { type: 'consent' }), field('Applications per day', 'limits.max_applications_per_day', { type: 'number' }),
+      field('Cold-email companies', 'consent.cold_email_since', { type: 'consent' }), field('Make job-site accounts for me', 'consent.create_accounts_since', { type: 'consent' }), field('Applications per day', 'limits.max_applications_per_day', { type: 'number' }),
       field('Min score to apply (1-5)', 'limits.min_score', { type: 'number' })].join('')}
       <div class="field"><label>Run every day at</label><input id="run-at" type="time" value="${esc(get('schedule.run_at') || '10:00')}"></div></div>`;
 }
