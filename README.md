@@ -18,6 +18,18 @@ career-ops helps you find and judge jobs with an AI CLI. This fork adds three th
 
 Not affiliated with or endorsed by the career-ops project.
 
+![Overview: applications sent, statuses from your inbox, and what needs you](desktop/screenshots/overview.png)
+
+<table>
+<tr>
+<td width="33%"><img src="desktop/screenshots/applications.png" alt="One application: timeline of emails, answers sent, resume and report"><br><sub><b>Applications.</b> Every email and status change, the answers sent, the resume and the fit report.</sub></td>
+<td width="33%"><img src="desktop/screenshots/inbox.png" alt="Inbox: rejections, interviews and offers matched to applications"><br><sub><b>Inbox.</b> Rejections, interviews and offers found in your Gmail, matched to the right application.</sub></td>
+<td width="33%"><img src="desktop/screenshots/outreach.png" alt="Outreach: emails to recruiters with their status"><br><sub><b>Outreach.</b> The email to each recruiter, who it went to, and whether they replied.</sub></td>
+</tr>
+</table>
+
+<sub>Screenshots use made-up demo data (`node desktop/demo.mjs <empty folder>`).</sub>
+
 ---
 
 ## What you need

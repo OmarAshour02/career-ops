@@ -40,6 +40,13 @@ answers to common form questions, so your first runs don't get stuck.
 The installed app is only a launcher: it loads `desktop/` from your career-ops folder, so code changes show up
 on the next start. Rebuild (`npm run install-app`) only after changing `main.mjs` or `preload.cjs`.
 
+Try it with made-up data, no setup needed:
+
+```bash
+node desktop/demo.mjs /tmp/career-ops-demo
+cd desktop && CAREER_OPS_ROOT=/tmp/career-ops-demo npx electron .
+```
+
 Dev check: `CO_SNAPSHOT=/tmp/shots CO_SNAPSHOT_STEPS=overview,apps:resume,settings:run npx electron .`
 saves a PNG of each view and quits.
 
