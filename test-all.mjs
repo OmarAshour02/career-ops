@@ -1861,7 +1861,8 @@ for (const f of skillEntrypoints) {
 // the browser the container ships. Nothing enforced either pin against
 // package.json's own playwright version, so this keeps all three in sync
 // going forward instead of relying on whoever next reads the Dockerfile.
-{
+// This fork ships no Dockerfile; the check runs only when one exists.
+if (fileExists('Dockerfile')) {
   const pkgPlaywright = JSON.parse(readFile('package.json')).dependencies?.playwright;
   const dockerfile = readFile('Dockerfile');
   const dockerfileLine2 = dockerfile.split(/\r?\n/, 3)[1] ?? '';
@@ -18387,7 +18388,8 @@ try {
 
 console.log('\n72. Funding manifest integrity (funding.json)');
 
-try {
+// This fork ships no funding.json; the check runs only when one exists.
+if (fileExists('funding.json')) try {
   const fundingRaw = readFile('funding.json');
   let funding = null;
   try {

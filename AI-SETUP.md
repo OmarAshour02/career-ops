@@ -226,7 +226,7 @@ node autoapply/profile.mjs model prescore            # prints the fit-check mode
 node --input-type=module -e "import { promptValues, loadFacts } from './autoapply/profile.mjs'; console.log(promptValues(loadFacts('.')))"
 python3 autoapply/mail.py login                      # "ok: user can read (IMAP) and send (SMTP)"
 node doctor.mjs --json                               # onboardingNeeded false, unpersonalized []
-node --test autoapply/*.test.mjs                     # all pass
+node --test tests/autoapply/*.test.mjs               # all pass
 ```
 
 `doctor.mjs` may warn "Playwright MCP tools not detected". Auto-apply doesn't need that:

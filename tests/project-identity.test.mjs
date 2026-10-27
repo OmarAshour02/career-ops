@@ -31,7 +31,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -67,7 +67,7 @@ test('every short blurb describes the same project in the same words', () => {
   }
 });
 
-test("CITATION.cff's url is the project's site, not a personal one", () => {
+test("CITATION.cff's url is the project's site, not a personal one", { skip: !existsSync(join(ROOT, 'CITATION.cff')) && 'this fork ships no CITATION.cff' }, () => {
   const pkg = JSON.parse(read('package.json'));
   const citation = read('CITATION.cff');
 
@@ -81,7 +81,7 @@ test("CITATION.cff's url is the project's site, not a personal one", () => {
   );
 });
 
-test('the CITATION.cff repository-code field points at this repository', () => {
+test('the CITATION.cff repository-code field points at this repository', { skip: !existsSync(join(ROOT, 'CITATION.cff')) && 'this fork ships no CITATION.cff' }, () => {
   const pkg = JSON.parse(read('package.json'));
   const citation = read('CITATION.cff');
 
