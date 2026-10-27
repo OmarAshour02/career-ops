@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; frame-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>Career Ops</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark">C</div>Career Ops</div>
+      <nav class="nav" id="nav"></nav>
+      <div class="sidebar-foot" id="foot"></div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <h1 id="title">Overview</h1>
+        <input class="search" id="search" type="search" placeholder="Search company or role" autocomplete="off">
+        <button class="btn primary" id="sync" title="Read new email and update statuses">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2.5v3h-3"/></svg>
+          <span>Check inbox</span>
+        </button>
+      </header>
+      <section class="content" id="view"></section>
+    </main>
+  </div>
+  <script src="app.js"></script>
+  <script src="settings.js"></script>
+</body>
+</html>

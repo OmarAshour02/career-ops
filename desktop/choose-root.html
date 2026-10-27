@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+  <title>Career Ops</title>
+  <style>
+    :root { --bg: #2F243A; --card: #382D44; --text: #F6EEEB; --muted: #BEBBBB; --accent: #DB8A74; --on: #2F243A; color-scheme: dark; }
+    @media (prefers-color-scheme: light) { :root { --bg: #F5F2F1; --card: #FFFFFF; --text: #2F243A; --muted: #5E5868; color-scheme: light; } }
+    body { margin: 0; height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, BlinkMacSystemFont, sans-serif; -webkit-app-region: drag; }
+    .card { -webkit-app-region: no-drag; width: 460px; background: var(--card); border-radius: 14px; padding: 28px 30px; box-shadow: 0 10px 40px rgba(0,0,0,.25); }
+    .mark { width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #FAC9B8, #DB8A74); display: grid; place-items: center; color: #2F243A; font-weight: 800; font-size: 20px; margin-bottom: 14px; }
+    h1 { font-size: 19px; margin: 0 0 6px; }
+    p { color: var(--muted); margin: 0 0 12px; }
+    code { font-size: 12px; }
+    button { margin-top: 8px; padding: 9px 16px; border: 0; border-radius: 8px; background: var(--accent); color: var(--on); font-weight: 600; font-size: 14px; cursor: pointer; }
+    .err { color: var(--accent); margin-top: 12px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="mark">C</div>
+    <h1>Find your career-ops folder</h1>
+    <p>Career Ops reads your applications from a <b>career-ops</b> folder (the one with <code>autoapply/</code> and <code>desktop/</code> inside).</p>
+    <p id="tried"></p>
+    <button id="pick">Choose folder…</button>
+    <div class="err" id="err"></div>
+  </div>
+  <script>
+    const tried = new URLSearchParams(location.search).get('tried');
+    if (tried) document.getElementById('tried').textContent = `Not found at ${tried}.`;
+    document.getElementById('pick').onclick = async () => {
+      const r = await window.co.chooseRoot();
+      if (r && r.error) document.getElementById('err').textContent = r.error;
+    };
+  </script>
+</body>
+</html>
