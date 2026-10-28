@@ -3,7 +3,7 @@
 // Keeps: Greenhouse/Lever/Ashby/Workable/SmartRecruiters/Recruitee/BambooHR (plus account sites such as Workday,
 // iCIMS and companies' own career sites once consent.create_accounts_since is set), non-staff titles, not blacklisted, at most
 // PER_COMPANY applications per company per 30 days and per run (big companies: their own cap), newest first.
-import { readFileSync, existsSync, readdirSync } from 'fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import * as yaml from 'js-yaml';
@@ -81,10 +81,15 @@ for (const l of read('data/applications.md').split('\n')) {
 }
 const RES = join(ROOT, 'autoapply/results');
 const seenUrls = new Set();
+// A job that stopped on a missing answer is retried once the answer bank changed after it.
+const factsPath = join(ROOT, 'config/apply-facts.yml');
+const factsMtime = existsSync(factsPath) ? statSync(factsPath).mtimeMs : 0;
+const retry = new Set();
 for (const f of existsSync(RES) ? readdirSync(RES) : []) {
   if (!f.endsWith('.json') || f.startsWith('dry-')) continue;
   try {
     const r = JSON.parse(readFileSync(join(RES, f), 'utf-8'));
+    if (r.status === 'needs_answer' && statSync(join(RES, f)).mtimeMs < factsMtime) { retry.add(urlKey(r.url)); continue; }
     seenUrls.add(urlKey(r.url));
     addRole(r.company, r.role);
     if (r.status === 'submitted' && (Date.now() - Date.parse(r.finished_at)) / 864e5 < 30) bump(norm(r.company));
@@ -93,13 +98,15 @@ for (const f of existsSync(RES) ? readdirSync(RES) : []) {
 // Prescore skips leave no result file. Drop them here too, or they keep taking
 // the company's places in the queue and the runner then throws them away.
 for (const r of attemptRecords(ROOT)) if (r.stage === 'prescore' && r.mode === 'live') seenUrls.add(urlKey(r.url));
+for (const k of seenUrls) retry.delete(k);
 
 const jobs = [];
 for (const line of read('data/pipeline.md').split('\n')) {
   const m = line.match(/^- \[ \] (\S+) \| ([^|]+) \| ([^|]+)(?: \| ([^|]*?))?(?: \| posted: (\S+))?\s*$/);
   if (!m) continue;
   const [, url, company, title, location = '', posted = ''] = m.map((x) => (x ?? '').trim());
-  if (!applyable(url) || seenUrls.has(urlKey(url)) || seenRole(company, title, location)) continue;
+  // The retried job's own tracker row would otherwise count as "same role already seen".
+  if (!applyable(url) || seenUrls.has(urlKey(url)) || (!retry.has(urlKey(url)) && seenRole(company, title, location))) continue;
   if (TOO_SENIOR.test(title) || OFF_TARGET.test(title)) continue;
   if (blacklist.includes(norm(company)) || inProcess.has(norm(company))) continue;
   addRole(company, title, location);

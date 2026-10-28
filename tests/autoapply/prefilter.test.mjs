@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 const PREFILTER = join(import.meta.dirname, '../../autoapply/prefilter.mjs');
 
-function queue(t, { pipeline, tracker = [], results = [], prescored = [], perCompany = 5, location = () => 'Remote', extraFacts = '', portals = '' }) {
+function queue(t, { pipeline, tracker = [], results = [], prescored = [], perCompany = 5, location = () => 'Remote', extraFacts = '', portals = '', factsEditedAfter = false }) {
   const root = mkdtempSync(join(tmpdir(), 'prefilter-test-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   for (const d of ['data', 'config', 'autoapply/results']) mkdirSync(join(root, d), { recursive: true });
@@ -17,6 +17,7 @@ function queue(t, { pipeline, tracker = [], results = [], prescored = [], perCom
   const today = new Date().toISOString().slice(0, 10);
   writeFileSync(join(root, 'data/applications.md'), tracker.map(([n, company, role, status]) => `| ${n} | ${today} | ${company} | ${role} | 3/5 | ${status} | ✅ | [${n}](reports/${n}.md) | |`).join('\n') + '\n');
   results.forEach((r, i) => writeFileSync(join(root, `autoapply/results/${i + 1}.json`), JSON.stringify(r)));
+  if (factsEditedAfter) { const later = new Date(Date.now() + 60_000); utimesSync(join(root, 'config/apply-facts.yml'), later, later); }
   prescored.forEach((url, i) => { const d = join(root, `autoapply/attempts/p${i}`); mkdirSync(d, { recursive: true }); writeFileSync(join(d, 'record.json'), JSON.stringify({ stage: 'prescore', mode: 'live', status: 'skipped', url })); });
   const out = execFileSync(process.execPath, [PREFILTER], { env: { ...process.env, AUTOAPPLY_ROOT: root }, encoding: 'utf8' });
   return out.trim().split('\n').filter(Boolean).map((l) => l.split('\t').slice(0, 2));
@@ -150,4 +151,15 @@ test('companies in a hiring process are never queued', t => {
     ],
   });
   assert.deepEqual(got.map(([c]) => c), ['acme']);
+});
+
+test('a job stopped on a missing answer is retried after the answer bank changes', t => {
+  const url = 'https://jobs.ashbyhq.com/acme/1';
+  const args = {
+    tracker: [['1', 'acme', 'Backend Engineer', 'Evaluated']],
+    results: [{ url, company: 'acme', role: 'Backend Engineer', status: 'needs_answer' }, { url: 'https://jobs.ashbyhq.com/beta/1', company: 'beta', role: 'Platform Engineer', status: 'submitted', finished_at: new Date().toISOString() }],
+    pipeline: [[url, 'acme', 'Backend Engineer'], ['https://jobs.ashbyhq.com/beta/1', 'beta', 'Platform Engineer']],
+  };
+  assert.deepEqual(queue(t, args).map(([c]) => c), []);
+  assert.deepEqual(queue(t, { ...args, factsEditedAfter: true }).map(([c]) => c), ['acme']);
 });
