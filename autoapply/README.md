@@ -33,6 +33,16 @@ The runner's limits are process-enforced. Prompt instructions are not the retry
 or timeout mechanism. Jobs run at most once per batch. The daily attempt cap
 includes failures; reaching an application cap cannot cause unlimited attempts.
 
+## CAPTCHAs
+
+Workers try to solve a CAPTCHA in the browser before giving up. They click the
+widget, then `Read` a cropped screenshot of the challenge and click the matching
+tiles or point with `browser_run_code_unsafe` (the exact snippets are in
+`apply-prompt.md`). Limit: 3 puzzle rounds or 3 minutes. If it still fails (audio,
+SMS, "press and hold", a Cloudflare loop or repeated wrong answers), the worker runs
+`captcha-alert.sh`, waits up to 3 minutes for the owner, then records `skipped`
+(reason `captcha`). `google-login.sh` reduces how often puzzles appear at all.
+
 ## Prescore (cheap fit check, opt-in)
 
 `--prescore` (or `AUTOAPPLY_PRESCORE=1`) on the fast lane runs one OpenCode call

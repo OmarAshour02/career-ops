@@ -77,6 +77,12 @@ test('worker gets isolated stdin; dry run records usage without legacy writes', 
   assert.equal(existsSync(join(f.root, 'autoapply/results/001.json')), false);
   assert.equal(usageSummary(f.root, { mode: 'dry-run' }).stages.fast.median_first_input_tokens, 60);
 });
+test('worker prompt tells the worker to solve CAPTCHAs', async t => {
+  const f = fixture(t); const b = await runBatch(f);
+  const prompt = readFileSync(join(f.root, 'autoapply/attempts', b.attempts[0].attempt_id, 'prompt.md'), 'utf8');
+  assert.match(prompt, /CAPTCHA → solve it yourself/);
+  assert.doesNotMatch(prompt, /never solve it yourself/);
+});
 test('quota trips a persistent breaker and prevents remaining dispatch', async t => {
   const f = fixture(t); f.workerPrefix[1] = 'quota';
   f.jobs.push({ ...f.jobs[0], url: 'https://jobs.example/2' });

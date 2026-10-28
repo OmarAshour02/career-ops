@@ -20,7 +20,7 @@ if (Object.keys(reasons).length) lines.push('## Skip reasons', ...Object.entries
 const spam = by('skipped').filter((r) => /^spam_flagged/i.test(String(r.reason || '')));
 if (spam.length) { lines.push('## WARNING: flagged as spam (that site was stopped for the day)'); for (const r of spam) lines.push(`- ${r.company} — ${r.role}: ${r.url}`); lines.push(''); }
 const captcha = by('skipped').filter((r) => /^captcha/i.test(String(r.reason || '')));
-if (captcha.length) { lines.push('## CAPTCHA: apply by hand'); for (const r of captcha) lines.push(`- ${r.company} — ${r.role}: ${r.url}`); lines.push(''); }
+if (captcha.length) { lines.push('## CAPTCHA: still unsolved (apply by hand)'); for (const r of captcha) lines.push(`- ${r.company} — ${r.role}: ${r.url}`); lines.push(''); }
 if (by('failed').length) { lines.push('## Failed'); for (const r of by('failed')) lines.push(`- ${r.company}: ${r.reason}`); lines.push(''); }
 const sentToday = out.filter((d) => String(d.sent_at || '').startsWith(day));
 const fuToday = out.filter((d) => String(d.followup_at || '').startsWith(day));

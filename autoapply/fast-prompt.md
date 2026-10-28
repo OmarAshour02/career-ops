@@ -80,8 +80,10 @@ Follow `autoapply/apply-prompt.md` sections "Sources of truth", "Hard rules" and
   words", "do not use AI tools") → do not agree, do not submit. `skipped`, reason `no_ai_policy`.
 - Email verification code → get it with `autoapply/mail.py code` exactly as
   `autoapply/apply-prompt.md` says. Never open or read the mailbox any other way.
-- CAPTCHA → never solve it yourself; alert {{FIRST}} and wait at most 3 minutes, exactly as
-  `autoapply/apply-prompt.md` says. No confirmation → `skipped`, reason `captcha`.
+- CAPTCHA → solve it yourself: click the checkbox, then use the exact scan/click
+  snippets in the CAPTCHA rule of `autoapply/apply-prompt.md` for up to 3 puzzle rounds.
+  Only if that fails, alert {{FIRST}} and wait at most 3 minutes; still no confirmation
+  → `skipped`, reason `captcha`.
 - The site says the application was flagged as spam or as a bot (e.g. "flagged as possible
   spam") → do NOT submit again. `skipped`, reason `spam_flagged`.
 - Free text in {{FIRST}}'s voice: {{VOICE}}, no buzzwords, no em dashes.
