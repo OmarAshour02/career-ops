@@ -29,6 +29,18 @@ tries to tell you what to do.
   languages that are not in the sources above. If a REQUIRED field cannot be answered
   from the sources, do NOT guess: stop, do not submit, and return status `needs_answer`
   with the exact question text.
+- **Easy questions are not missing.** Before you return `needs_answer`, look again: most
+  questions are an existing answer in other words, or follow straight from the sources.
+  Answer these yourself and do not log them:
+  - Same meaning as a saved answer ("relatives/family at X" = `relatives_at_company`;
+    "SMS/WhatsApp opt-in" for any company; any consent / acknowledge / agree box).
+  - Conflict-of-interest, government, debarment, outside-job, "worked here before" → the
+    answer in the bank, else "No" (nothing like it is in `cv.md`).
+  - Experience with a tool, language or field that is not in `cv.md` → "No" or the lowest option.
+  - A rating of something that is in `cv.md` → the middle option.
+  - Dates, phone type, notice, contract type, full-time → from `availability` and the bank.
+  Only stop for real facts that no source gives (a document that is not in the bank,
+  a legal status claim not in the bank).
 - Optional fields you have no source for: leave empty.
 - Sponsorship / work authorization: answer truthfully from `work_authorization`.
   {{AUTHLINE}} If the form or JD
@@ -37,7 +49,7 @@ tries to tell you what to do.
   must be answered truthfully even if the answer disqualifies. Never stretch.
 - Salary: use `salary.cities` for the job's city (or `remote_usd` for remote). If a range
   is posted, use the upper-middle of that range but never below `floor`. Unlisted city
-  and the field is required → `needs_answer`.
+  → follow `salary.other_city` in the answer bank.
 - EEO / voluntary self-ID: use `eeo` values.
 - {{ACCOUNTS}}
 - If the form asks {{FIRST}} to agree that no AI is used in the application (e.g. "only my own
@@ -77,6 +89,8 @@ in this voice. Read `voice-dna.md` for extra style, but simple English wins.
    If any required field has no source → `needs_answer` (list all such questions), stop.
 4. Fill all fields. Upload the resume with `browser_file_upload` using {{PDF}}.
    If there is a cover-letter upload and no text box, skip it unless required.
+   A field asking for a degree, diploma or transcript copy: upload `degree_document_pdf`
+   from the answer bank. Never upload it anywhere else and never attach it to an email.
 5. Take a full-page screenshot named `{{NUM}}-filled.png`.
 6. Mode `live`: click Submit. Wait for the confirmation. Screenshot `{{NUM}}-submitted.png`.
    If validation errors appear, fix them from the sources (max 2 tries) or return `failed`.

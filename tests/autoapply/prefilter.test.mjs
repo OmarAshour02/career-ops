@@ -138,3 +138,16 @@ test('big companies get their own higher per-company cap', t => {
   assert.equal(got.filter(([c]) => c === 'JPMorgan Chase').length, 3);
   assert.equal(got.filter(([c]) => c === 'small').length, 1);
 });
+
+test('companies in a hiring process are never queued', t => {
+  const got = queue(t, {
+    extraFacts: 'in_process_companies: [ Google ]\n',
+    tracker: [['1', 'Cloudflare', 'Systems Engineer', 'Interview'], ['2', 'acme', 'Backend Engineer', 'Rejected']],
+    pipeline: [
+      ['https://boards.greenhouse.io/cloudflare/jobs/9', 'Cloudflare', 'Software Engineer, Network'],
+      ['https://boards.greenhouse.io/google/jobs/9', 'Google', 'Site Reliability Engineer'],
+      ['https://boards.greenhouse.io/acme/jobs/9', 'acme', 'Platform Engineer'],
+    ],
+  });
+  assert.deepEqual(got.map(([c]) => c), ['acme']);
+});

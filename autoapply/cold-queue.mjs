@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import * as yaml from 'js-yaml';
 import { attemptRecords } from './runtime.mjs';
+import { inProcessCompanies } from './in-process.mjs';
 
 const ROOT = process.env.AUTOAPPLY_ROOT || join(dirname(fileURLToPath(import.meta.url)), '..');
 const MODE = process.env.AUTOAPPLY_MODE || 'live';
@@ -25,6 +26,7 @@ const TOO_SENIOR = /\b(staff|principal|lead|manager|director|head|vp|chief|archi
 const OFF_TARGET = /\b(sales|account|marketing|recruit|designer|legal|finance|analyst|scientist|researcher|support|consultant|solutions engineer|ios|android|mobile|frontend|front-end|qa|test)\b/i;
 
 const excluded = new Set(read('data/blacklist.md').split('\n').filter(l => l.startsWith('| ') && !l.includes('---')).map(l => norm(l.split('|')[1])));
+for (const c of inProcessCompanies(ROOT)) excluded.add(c); // never cold-email where the owner is interviewing
 for (const l of read('data/applications.md').split('\n')) {
   const c = l.split('|').map(x => x.trim());
   if (/^\d+$/.test(c[1] || '') && /applied|responded|interview|offer/i.test(c[6]) && (Date.now() - Date.parse(c[2])) / 864e5 < 30) excluded.add(norm(c[3]));

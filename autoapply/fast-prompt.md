@@ -70,7 +70,10 @@ Follow `autoapply/apply-prompt.md` sections "Sources of truth", "Hard rules" and
 
 - Answers come ONLY from `config/apply-facts.yml`, `config/profile.yml`, `cv.md`.
 - Never invent anything. A required question with no source → stop, don't submit,
-  status `needs_answer`, list the exact question(s).
+  status `needs_answer`, list the exact question(s). But easy questions (same meaning as a
+  saved answer, consent boxes, conflict-of-interest "No", a tool not in `cv.md` → "No",
+  dates from `availability`) are NOT missing: answer them, as the "Easy questions" rule in
+  `autoapply/apply-prompt.md` says.
 - Sponsorship, years of experience, degree, location: always the truth.
 - {{ACCOUNTS}}
 - The form asks {{FIRST}} to agree that no AI is used in the application (e.g. "only my own

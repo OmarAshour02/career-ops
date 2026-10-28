@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url';
 import * as yaml from 'js-yaml';
 import { roleFuzzyMatch } from '../role-matcher.mjs';
 import { attemptRecords, normalizeUrl } from './runtime.mjs';
+import { inProcessCompanies } from './in-process.mjs';
 
 const ROOT = process.env.AUTOAPPLY_ROOT || join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf-8');
@@ -67,6 +68,8 @@ const blacklist = existsSync(join(ROOT, 'data/blacklist.md'))
   ? read('data/blacklist.md').split('\n').filter((l) => l.startsWith('| ') && !l.includes('---'))
       .map((l) => norm(l.split('|')[1])).filter((c) => c && c !== 'company')
   : [];
+// Never apply where the owner is already interviewing.
+const inProcess = inProcessCompanies(ROOT);
 
 // Applications per company in the last 30 days (tracker + result files).
 const recent = new Map();
@@ -98,7 +101,7 @@ for (const line of read('data/pipeline.md').split('\n')) {
   const [, url, company, title, location = '', posted = ''] = m.map((x) => (x ?? '').trim());
   if (!applyable(url) || seenUrls.has(urlKey(url)) || seenRole(company, title, location)) continue;
   if (TOO_SENIOR.test(title) || OFF_TARGET.test(title)) continue;
-  if (blacklist.includes(norm(company))) continue;
+  if (blacklist.includes(norm(company)) || inProcess.has(norm(company))) continue;
   addRole(company, title, location);
   jobs.push({ url, company, title, location, posted });
 }

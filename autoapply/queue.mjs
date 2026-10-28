@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // Build the auto-apply queue from data/applications.md + reports/.
-// Gates: status Evaluated, score >= min_score, supported ATS, not blacklisted,
+// Gates: status Evaluated, score >= min_score, supported ATS, not blacklisted, not in process (in-process.mjs),
 // no Applied row for the same company in the last N days, not already attempted.
 import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { inProcessCompanies } from './in-process.mjs';
 
 const ROOT = process.env.AUTOAPPLY_ROOT || join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf-8');
@@ -42,6 +43,7 @@ const rows = read('data/applications.md').split('\n')
     return { num: c[1], date: c[2], company: c[3], role: c[4], score: parseFloat(c[5]), status: c[6], report: c[8] };
   });
 
+const inProcess = inProcessCompanies(ROOT);
 const now = Date.now();
 const recentApplied = new Set(rows
   .filter((r) => /applied|responded|interview|offer/i.test(r.status) && (now - Date.parse(r.date)) / 864e5 < COMPANY_DAYS)
@@ -52,6 +54,7 @@ for (const r of rows) {
   if (!/^evaluated$/i.test(r.status) || !(r.score >= MIN_SCORE)) continue;
   if (attempted.has(r.num.padStart(3, '0'))) continue;
   if (blacklist.includes(norm(r.company))) continue;
+  if (inProcess.has(norm(r.company))) continue;
   if (recentApplied.has(norm(r.company))) continue;
   const reportPath = (r.report.match(/\(\.\.\/(reports\/[^)]+)\)/) || [])[1];
   if (!reportPath || !existsSync(join(ROOT, reportPath))) continue;

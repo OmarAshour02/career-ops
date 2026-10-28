@@ -96,6 +96,22 @@ class MailTests(unittest.TestCase):
             mail.cmd_followup(False)
             smtp.assert_not_called()
 
+    def test_no_followup_where_owner_is_interviewing(self):
+        self.row.update(sent_at=(mail.now() - timedelta(days=10)).isoformat(), message_id="<old@example.com>")
+        mail.save(self.path, self.row)
+        (self.root / "data").mkdir()
+        (self.root / "data" / "applications.md").write_text("| 1 | 2026-10-01 | Example | Engineer | 3/5 | Interview | ✅ | | |\n")
+        with patch.object(mail, "smtp_send") as smtp:
+            mail.cmd_followup(False)
+            smtp.assert_not_called()
+
+    def test_in_process_list_from_facts_blocks_followup(self):
+        self.row.update(sent_at=(mail.now() - timedelta(days=10)).isoformat(), message_id="<old@example.com>")
+        mail.save(self.path, self.row)
+        with patch.object(mail, "FACTS", mail.FACTS + "in_process_companies: [ Google, Example ] # note\n"), patch.object(mail, "smtp_send") as smtp:
+            mail.cmd_followup(False)
+            smtp.assert_not_called()
+
     def test_overlapping_mail_operations_are_rejected(self):
         with mail.mail_lock():
             with self.assertRaisesRegex(RuntimeError, "Another mail operation"):

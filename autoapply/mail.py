@@ -265,8 +265,33 @@ def cmd_send(dry):
     print(f"send: {sent} sent, {max(left, 0)} left today")
 
 
+def norm(s):
+    return re.sub(r"[^a-z0-9]", "", str(s).lower())
+
+
+def in_process_companies():
+    """Same rule as autoapply/in-process.mjs: tracker status Responded/Interview/Offer
+    plus `in_process_companies` in apply-facts.yml. The owner is interviewing there, so no follow-ups."""
+    out = set()
+    tracker = ROOT / "data" / "applications.md"
+    for line in (tracker.read_text().splitlines() if tracker.exists() else []):
+        c = [x.strip() for x in line.split("|")]
+        if len(c) > 6 and c[1].isdigit() and re.fullmatch(r"(?i)responded|interview|offer", c[6]):
+            out.add(norm(c[3]))
+    m = re.search(r"^in_process_companies:[ \t]*\[([^\]]*)\]", FACTS, re.M)
+    if m:
+        names = m.group(1).split(",")
+    else:
+        m = re.search(r"^in_process_companies:[^\n]*\n((?:[ \t]+-[^\n]*\n?)+)", FACTS, re.M)
+        names = re.findall(r"^[ \t]+-[ \t]*([^#\n]*)", m.group(1), re.M) if m else []
+    out.update(norm(x.split("#")[0].strip(" '\"")) for x in names)
+    out.discard("")
+    return out
+
+
 def cmd_followup(dry):
     items = load_all()
+    busy = in_process_companies()
     left = MAX_PER_DAY - sent_today(items)
     user, _ = env() if not dry else ("dry-run@example.com", None)
     n = 0
@@ -278,6 +303,8 @@ def cmd_followup(dry):
             continue
         if not dry and not allowed(d):
             continue
+        if norm(d.get("company", "")) in busy:
+            continue  # already interviewing there: a "just following up" note would look careless
         if now() - datetime.fromisoformat(d["sent_at"]) < timedelta(days=FOLLOW_DAYS):
             continue
         body = d.get("followup_body") or (

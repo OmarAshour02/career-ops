@@ -43,6 +43,7 @@ defaults:
   how_did_you_hear: "Company careers page"
   previously_worked_here: "No"
   age_18_plus: "Yes"
+  degree_document_pdf: ""         # optional: full path to a degree / transcript PDF, uploaded only when a form asks for one
 
 outreach:
   max_emails_per_day: 25
@@ -57,6 +58,10 @@ outreach:
   rules:
     - 'Never invent numbers; every claim must be in cv.md.'
   proof_points: []               # - text: "What you did, with a real number."  use_for: "For which companies."
+
+# Companies where you are in a hiring process the tracker does not show: never apply,
+# cold-email or follow up there. Tracker rows marked Responded / Interview / Offer are blocked too.
+in_process_companies: []         # e.g. [ Acme ]
 
 limits:
   max_applications_per_day: 25
