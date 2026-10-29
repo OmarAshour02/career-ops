@@ -343,7 +343,10 @@ export async function runBatch({ root = DEFAULT_ROOT, stage, options, jobs, sign
           record.usage = execution.usage; record.exit_code = execution.exit_code;
           let result, invalid;
           try {
-            result = readJson(payloadPath); invalid = validateResult(result, record);
+            result = readJson(payloadPath);
+            // Workers sometimes write the evidence path as a bare string.
+            if (typeof result?.confirmation === 'string') result.confirmation = { evidence: result.confirmation };
+            invalid = validateResult(result, record);
             if (!invalid && result.status === 'submitted' && !existsSync(within(root, result.confirmation.evidence))) invalid = 'missing_confirmation';
           }
           catch { invalid = 'invalid_result_json'; }

@@ -185,9 +185,10 @@ Write `autoapply/results/{{NUM}}.json`:
   "answers": [{"question": "...", "answer": "...", "source": "apply-facts.yml:salary.cities.Berlin"}],
   "city": "city used for salary, or remote",
   "screenshots": ["autoapply/screens/{{NUM}}-filled.png"],
+  "confirmation": {"evidence": "autoapply/screens/{{NUM}}-submitted.png"},
   "finished_at": "ISO timestamp"
 }
 ```
 
-Every answer must name its `source`. Free-text answers use source `written:<proof point>`.
+`confirmation` is an object, only for `submitted`. Every answer must name its `source`. Free-text answers use source `written:<proof point>`.
 Do not edit any other file. The runner updates the tracker.
