@@ -56,13 +56,17 @@ const accountsOk = /^\s*create_accounts_since:\s*"?\d{4}-\d\d-\d\d/m.test(facts)
 // A tracked company's own career site (careers.allianz.com...) is its apply form too.
 const hostOf = (u) => { try { return new URL(u).hostname.toLowerCase(); } catch { return ''; } };
 const ownHosts = new Set();
-try {
-  for (const c of yaml.load(read('portals.yml'))?.tracked_companies || []) if (c.enabled !== false) ownHosts.add(hostOf(c.careers_url || c.api));
-} catch {}
+let portals = {};
+try { portals = yaml.load(read('portals.yml')) || {}; } catch {}
+for (const c of portals.tracked_companies || []) if (c.enabled !== false) ownHosts.add(hostOf(c.careers_url || c.api));
 ownHosts.delete('');
 const applyable = (url) => ATS.test(url) || (accountsOk && (ACCOUNT_ATS.test(url) || ownHosts.has(hostOf(url))));
 const TOO_SENIOR = /\b(staff|principal|lead|manager|director|head|vp|chief|architect|distinguished|fellow|phd|intern(ship)?|working student|werkstudent|apprentice|trainee)\b/i;
-const OFF_TARGET = /\b(sales|account|marketing|recruit|designer|legal|finance|analyst|scientist|researcher|support|consultant|solutions engineer|ios|android|mobile|flutter|react native|frontend|front-end|qa|test)\b/i;
+// A word this profile targets (portals.yml title_filter.positive) is not off-target for it.
+const targeted = (portals.title_filter?.positive || []).join(' | ').toLowerCase();
+const offWords = ['sales', 'account', 'marketing', 'recruit', 'designer', 'legal', 'finance', 'analyst', 'scientist', 'researcher', 'support', 'consultant', 'solutions engineer', 'ios', 'android', 'mobile', 'flutter', 'react native', 'frontend', 'front-end', 'qa', 'test']
+  .filter((w) => !new RegExp(`\\b${w}\\b`).test(targeted));
+const OFF_TARGET = offWords.length ? new RegExp(`\\b(${offWords.join('|')})\\b`, 'i') : /$^/;
 
 const blacklist = existsSync(join(ROOT, 'data/blacklist.md'))
   ? read('data/blacklist.md').split('\n').filter((l) => l.startsWith('| ') && !l.includes('---'))
