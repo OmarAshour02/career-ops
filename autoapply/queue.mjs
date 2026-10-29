@@ -36,7 +36,7 @@ const attempted = new Set(
   }).map((f) => f.split('.')[0]) : []
 );
 
-const rows = read('data/applications.md').split('\n')
+const rows = (existsSync(join(ROOT, 'data/applications.md')) ? read('data/applications.md') : '').split('\n')
   .filter((l) => /^\|\s*\d+\s*\|/.test(l))
   .map((l) => {
     const c = l.split('|').map((x) => x.trim());

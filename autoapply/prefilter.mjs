@@ -74,7 +74,8 @@ const inProcess = inProcessCompanies(ROOT);
 // Applications per company in the last 30 days (tracker + result files).
 const recent = new Map();
 const bump = (c) => recent.set(c, (recent.get(c) || 0) + 1);
-for (const l of read('data/applications.md').split('\n')) {
+// A new profile has no tracker until its first application.
+for (const l of (existsSync(join(ROOT, 'data/applications.md')) ? read('data/applications.md') : '').split('\n')) {
   const c = l.split('|').map((x) => x.trim());
   if (/^\d+$/.test(c[1] || '')) addRole(c[3], c[4]);
   if (/^\d+$/.test(c[1] || '') && /applied|responded|interview|offer/i.test(c[6]) && (Date.now() - Date.parse(c[2])) / 864e5 < 30) bump(norm(c[3]));
