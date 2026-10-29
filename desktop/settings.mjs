@@ -11,6 +11,8 @@ const FACTS = 'config/apply-facts.yml', EXAMPLE = 'config/apply-facts.example.ym
 const LABEL = 'com.careerops.daily', OLD_LABELS = ['com.omar.autoapply'];
 const agentPath = (label) => join(homedir(), 'Library/LaunchAgents', `${label}.plist`);
 const UNIT = 'careerops-daily', CRON_TAG = '# careerops-daily';
+// Every 30 minutes: restarts a run that stopped on the Claude usage limit once it is back (autoapply/quota-watch.sh).
+const WATCH_LABEL = 'com.careerops.quotawatch', WATCH_UNIT = 'careerops-quotawatch', WATCH_TAG = '# careerops-quotawatch';
 const unitDir = () => join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'systemd/user');
 
 function atomicWrite(p, text) {
@@ -48,7 +50,7 @@ export function readSettings(root) {
     resume: resumeAbs && existsSync(resumeAbs) ? { path: resumeRel, size: statSync(resumeAbs).size, modified: statSync(resumeAbs).mtime.toISOString() } : { path: resumeRel, missing: true },
     paused: existsSync(join(root, 'autoapply/.nonstop.stop')),
     cv: existsSync(join(root, 'cv.md')) ? readFileSync(join(root, 'cv.md'), 'utf8') : '',
-    schedule: scheduleState(),
+    schedule: scheduleFor(root),
     models: { ...MODEL_DEFAULTS, ...facts.models },
   };
 }
@@ -107,6 +109,13 @@ export function setPaused(root, paused) {
   return readSettings(root);
 }
 
+// Only one profile can hold the daily job; `here` says whether it runs this folder.
+const folderOf = (script) => script && dirname(dirname(script.replace(/&lt;/g, '<').replace(/&amp;/g, '&')));
+function scheduleFor(root) {
+  const s = scheduleState();
+  return s.installed && s.root ? { ...s, here: s.root === root } : { ...s, here: Boolean(s.installed) };
+}
+
 function scheduleState() {
   if (process.platform === 'linux') return linuxScheduleState();
   if (process.platform !== 'darwin') return { supported: false };
@@ -115,7 +124,8 @@ function scheduleState() {
     if (!existsSync(p)) continue;
     const text = readFileSync(p, 'utf8');
     const h = text.match(/<key>Hour<\/key>\s*<integer>(\d+)/)?.[1], m = text.match(/<key>Minute<\/key>\s*<integer>(\d+)/)?.[1];
-    return { supported: true, installed: true, label, time: h != null ? `${h.padStart(2, '0')}:${String(m ?? 0).padStart(2, '0')}` : null };
+    const root = folderOf(text.match(/<string>([^<]*\/autoapply\/daily\.sh)<\/string>/)?.[1]);
+    return { supported: true, installed: true, label, root, time: h != null ? `${h.padStart(2, '0')}:${String(m ?? 0).padStart(2, '0')}` : null };
   }
   return { supported: true, installed: false };
 }
@@ -126,7 +136,7 @@ export function applySchedule(root, time) {
   if (process.platform !== 'darwin') throw new Error('Scheduling works on macOS and Linux only.');
   const uid = process.getuid();
   const unload = (label) => { try { execFileSync('launchctl', ['bootout', `gui/${uid}/${label}`], { stdio: 'ignore' }); } catch { /* not loaded */ } };
-  for (const label of [LABEL, ...OLD_LABELS]) { unload(label); if (existsSync(agentPath(label))) unlinkSync(agentPath(label)); }
+  for (const label of [LABEL, WATCH_LABEL, ...OLD_LABELS]) { unload(label); if (existsSync(agentPath(label))) unlinkSync(agentPath(label)); }
   if (!time) return readSettings(root);
   const [h, m] = time.split(':').map(Number);
   if (!(h >= 0 && h < 24 && m >= 0 && m < 60)) throw new Error('Use a time like 10:00.');
@@ -149,6 +159,23 @@ export function applySchedule(root, time) {
 </plist>
 `);
   execFileSync('launchctl', ['bootstrap', `gui/${uid}`, agentPath(LABEL)]);
+  atomicWrite(agentPath(WATCH_LABEL), `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>${WATCH_LABEL}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>${esc(join(root, 'autoapply/quota-watch.sh'))}</string>
+  </array>
+  <key>StartInterval</key><integer>1800</integer>
+  <key>StandardOutPath</key><string>${esc(join(root, 'autoapply/logs/launchd.out'))}</string>
+  <key>StandardErrorPath</key><string>${esc(join(root, 'autoapply/logs/launchd.err'))}</string>
+</dict>
+</plist>
+`);
+  execFileSync('launchctl', ['bootstrap', `gui/${uid}`, agentPath(WATCH_LABEL)]);
   saveFacts(root, { 'schedule.run_at': time });
   return readSettings(root);
 }
@@ -162,11 +189,14 @@ const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 export function linuxSchedule(root, time) {
   const [h, m] = time.split(':').map(Number);
   const hh = String(h).padStart(2, '0'), mm = String(m).padStart(2, '0');
-  const script = join(root, 'autoapply/daily.sh');
+  const script = join(root, 'autoapply/daily.sh'), watch = join(root, 'autoapply/quota-watch.sh');
   return {
     service: `[Unit]\nDescription=Career Ops daily auto-apply run\n\n[Service]\nType=oneshot\nWorkingDirectory=${root}\nExecStart=/bin/bash "${script}"\n`,
     timer: `[Unit]\nDescription=Career Ops daily run at ${hh}:${mm}\n\n[Timer]\nOnCalendar=*-*-* ${hh}:${mm}:00\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n`,
     cron: `${m} ${h} * * * /bin/bash ${shq(script)} >> ${shq(join(root, 'autoapply/logs/cron.out'))} 2>&1 ${CRON_TAG}`,
+    watchService: `[Unit]\nDescription=Career Ops: restart after the Claude usage limit\n\n[Service]\nType=oneshot\nWorkingDirectory=${root}\nExecStart=/bin/bash "${watch}"\n`,
+    watchTimer: `[Unit]\nDescription=Career Ops usage-limit check every 30 minutes\n\n[Timer]\nOnBootSec=10min\nOnUnitActiveSec=30min\n\n[Install]\nWantedBy=timers.target\n`,
+    watchCron: `*/30 * * * * /bin/bash ${shq(watch)} >> ${shq(join(root, 'autoapply/logs/cron.out'))} 2>&1 ${WATCH_TAG}`,
   };
 }
 
@@ -174,12 +204,15 @@ function linuxScheduleState() {
   const timer = join(unitDir(), `${UNIT}.timer`);
   if (existsSync(timer)) {
     const t = readFileSync(timer, 'utf8').match(/OnCalendar=\*-\*-\* (\d\d):(\d\d)/);
-    return { supported: true, installed: true, label: `${UNIT}.timer`, time: t ? `${t[1]}:${t[2]}` : null };
+    const service = join(unitDir(), `${UNIT}.service`);
+    const root = existsSync(service) ? readFileSync(service, 'utf8').match(/^WorkingDirectory=(.+)$/m)?.[1] : undefined;
+    return { supported: true, installed: true, label: `${UNIT}.timer`, root, time: t ? `${t[1]}:${t[2]}` : null };
   }
   const line = crontabLines().find((l) => l.endsWith(CRON_TAG));
   if (line) {
     const [m, h] = line.split(/\s+/);
-    return { supported: true, installed: true, label: 'crontab', time: `${h.padStart(2, '0')}:${m.padStart(2, '0')}` };
+    const root = folderOf(line.match(/'([^']*\/autoapply\/daily\.sh)'/)?.[1]);
+    return { supported: true, installed: true, label: 'crontab', root, time: `${h.padStart(2, '0')}:${m.padStart(2, '0')}` };
   }
   return { supported: true, installed: false };
 }
@@ -187,14 +220,16 @@ function linuxScheduleState() {
 function applyLinuxSchedule(root, time) {
   const systemd = hasSystemdUser();
   const timer = join(unitDir(), `${UNIT}.timer`), service = join(unitDir(), `${UNIT}.service`);
-  if (existsSync(timer) || existsSync(service)) {
-    if (systemd) try { execFileSync('systemctl', ['--user', 'disable', '--now', `${UNIT}.timer`], { stdio: 'ignore' }); } catch { /* not enabled */ }
-    for (const p of [timer, service]) if (existsSync(p)) unlinkSync(p);
+  const watchTimer = join(unitDir(), `${WATCH_UNIT}.timer`), watchService = join(unitDir(), `${WATCH_UNIT}.service`);
+  if ([timer, service, watchTimer, watchService].some(existsSync)) {
+    if (systemd) for (const u of [UNIT, WATCH_UNIT]) try { execFileSync('systemctl', ['--user', 'disable', '--now', `${u}.timer`], { stdio: 'ignore' }); } catch { /* not enabled */ }
+    for (const p of [timer, service, watchTimer, watchService]) if (existsSync(p)) unlinkSync(p);
     if (systemd) execFileSync('systemctl', ['--user', 'daemon-reload']);
   }
+  const ours = (l) => l.endsWith(CRON_TAG) || l.endsWith(WATCH_TAG);
   const cron = crontabLines();
   const setCron = (lines) => execFileSync('crontab', ['-'], { input: lines.length ? `${lines.join('\n')}\n` : '' });
-  if (cron.some((l) => l.endsWith(CRON_TAG))) setCron(cron.filter((l) => !l.endsWith(CRON_TAG)));
+  if (cron.some(ours)) setCron(cron.filter((l) => !ours(l)));
   if (!time) return readSettings(root);
   const [h, m] = time.split(':').map(Number);
   if (!(h >= 0 && h < 24 && m >= 0 && m < 60)) throw new Error('Use a time like 10:00.');
@@ -202,13 +237,16 @@ function applyLinuxSchedule(root, time) {
   if (systemd) {
     atomicWrite(service, s.service);
     atomicWrite(timer, s.timer);
+    atomicWrite(watchService, s.watchService);
+    atomicWrite(watchTimer, s.watchTimer);
     execFileSync('systemctl', ['--user', 'daemon-reload']);
     execFileSync('systemctl', ['--user', 'enable', '--now', `${UNIT}.timer`]);
+    execFileSync('systemctl', ['--user', 'enable', '--now', `${WATCH_UNIT}.timer`]);
   } else {
     try { execFileSync('crontab', ['-l'], { stdio: 'ignore' }); } catch (e) {
       if (e.code === 'ENOENT') throw new Error('No systemd user session and no crontab. Install cron (cronie) to schedule the daily run.');
     }
-    setCron([...crontabLines().filter((l) => !l.endsWith(CRON_TAG)), s.cron]);
+    setCron([...crontabLines().filter((l) => !ours(l)), s.cron, s.watchCron]);
   }
   saveFacts(root, { 'schedule.run_at': time });
   return readSettings(root);

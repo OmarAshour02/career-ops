@@ -48,6 +48,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 .sidebar > * { -webkit-app-region: no-drag; }
 .brand { display: flex; align-items: center; gap: 9px; padding: 0 8px 16px; font-weight: 650; font-size: 14px; }
 .brand-mark { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, var(--almond), var(--salmon)); display: grid; place-items: center; color: var(--violet); font-size: 12px; font-weight: 800; }
+.brand-profile { margin-left: auto; font-weight: 500; font-size: 11.5px; color: var(--faint); }
 .nav { display: flex; flex-direction: column; gap: 2px; }
 .nav button { all: unset; display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 7px; color: var(--muted); cursor: pointer; }
 .nav button:hover { background: var(--hover); color: var(--text); }
@@ -94,6 +95,16 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 .funnel-row .bar i { display: block; height: 100%; border-radius: 5px; }
 .chart svg { display: block; width: 100%; height: 150px; }
 .chart .axis { fill: var(--faint); font-size: 10px; }
+.sankey-card { margin-top: 14px; }
+.sankey-scroll { overflow-x: auto; }
+.sankey { display: block; width: 100%; min-width: 580px; }
+.sankey-label { fill: var(--text); font-size: 13px; }
+.sankey-count { fill: var(--muted); font-variant-numeric: tabular-nums; }
+.sankey-total { fill: var(--accent-text); font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.sankey-ribbon { opacity: 0.3; }
+.sankey-flow:hover .sankey-ribbon, .sankey-flow:focus .sankey-ribbon { opacity: 0.65; }
+.sankey-flow:focus { outline: none; }
+.sankey-flow:focus .sankey-label { text-decoration: underline; }
 .feed { display: flex; flex-direction: column; }
 .feed-item { display: grid; grid-template-columns: 86px 1fr auto; gap: 10px; align-items: start; padding: 8px 0; border-top: 1px solid var(--border); cursor: pointer; }
 .feed-item:first-child { border-top: 0; }

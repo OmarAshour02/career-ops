@@ -1,18 +1,83 @@
 // Career Ops desktop: a window over the career-ops files. Code and UI load live from ROOT/desktop,
 // so the packaged .app is only a launcher and edits show up on the next reload.
-import { app, BrowserWindow, ipcMain, shell, protocol, net, nativeTheme, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, protocol, net, nativeTheme, dialog, Menu } from 'electron';
 import { spawn, execFileSync } from 'node:child_process';
-import { watch, existsSync, writeFileSync, readFileSync, mkdirSync, statSync, rmSync } from 'node:fs';
-import { join, resolve, sep, dirname } from 'node:path';
+import { watch, existsSync, writeFileSync, readFileSync, mkdirSync, statSync, rmSync, symlinkSync, copyFileSync, appendFileSync, realpathSync } from 'node:fs';
+import { join, resolve, sep, dirname, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 
 // career-ops folder: env, then the folder picked in the app, then ~/career-ops.
 const PREFS = join(app.getPath('userData'), 'prefs.json');
 const prefs = (() => { try { return JSON.parse(readFileSync(PREFS, 'utf8')); } catch { return {}; } })();
+const savePrefs = (patch) => { Object.assign(prefs, patch); mkdirSync(dirname(PREFS), { recursive: true }); writeFileSync(PREFS, JSON.stringify(prefs, null, 1)); };
 const isRoot = (dir) => existsSync(join(dir, 'autoapply/runner.mjs')) && existsSync(join(dir, 'desktop/renderer/index.html'));
 const ROOT = resolve(process.env.CAREER_OPS_ROOT || prefs.root || join(homedir(), 'career-ops'));
 const ROOT_OK = isRoot(ROOT);
+
+// ---------- profiles: one career-ops folder per person (CV, settings, tracker, Gmail, job-site logins) ----------
+// prefs.profiles = [{ name, root }]. New profiles are git worktrees of this checkout, so they share its code.
+const real = (p) => { try { return realpathSync(p); } catch { return resolve(p); } };
+const git = (...args) => execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+const ownerName = (dir) => { try { return readFileSync(join(dir, 'config/apply-facts.yml'), 'utf8').match(/^\s*first_name:\s*["']?([^"'\n#]+)/m)?.[1].trim(); } catch { return null; } };
+function profileList() {
+  const list = (prefs.profiles || []).filter((p) => p?.root);
+  if (ROOT_OK && !list.some((p) => real(p.root) === real(ROOT))) list.unshift({ name: ownerName(ROOT) || basename(ROOT), root: ROOT });
+  return list.map((p) => ({ name: ownerName(p.root) || p.name, root: p.root, ok: isRoot(p.root), current: real(p.root) === real(ROOT) }));
+}
+const rememberProfile = (name, root) => savePrefs({ profiles: [...profileList().filter((p) => real(p.root) !== real(root)).map(({ name: n, root: r }) => ({ name: n, root: r })), { name, root }] });
+function switchProfile(root) {
+  if (!profileList().some((p) => real(p.root) === real(root)) || !isRoot(root)) throw new Error(`${root} is not one of your profiles.`);
+  savePrefs({ root, profiles: profileList().map(({ name, root: r }) => ({ name, root: r })) });
+  app.relaunch(); app.exit(0);
+}
+// The main checkout this folder's code comes from (itself, unless it is a worktree profile).
+const codeRoot = (dir) => dirname(git('-C', dir, 'rev-parse', '--path-format=absolute', '--git-common-dir'));
+function createProfile(name) {
+  const label = String(name || '').trim(), slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  if (!slug) throw new Error('Give the profile a name.');
+  let code;
+  try { code = codeRoot(ROOT); } catch { throw new Error('Profiles need career-ops installed with git clone.'); }
+  const dir = join(homedir(), 'career-ops-profiles', slug);
+  if (existsSync(dir)) throw new Error(`${dir} already exists.`);
+  mkdirSync(dirname(dir), { recursive: true });
+  git('-C', code, 'worktree', 'add', '--detach', dir, 'HEAD');
+  // Share installed packages; git's "node_modules/" ignore rule does not match a symlink, so exclude the links too.
+  const exclude = join(code, '.git/info/exclude');
+  const excluded = existsSync(exclude) ? readFileSync(exclude, 'utf8') : '';
+  for (const nm of ['node_modules', 'desktop/node_modules']) {
+    if (existsSync(join(code, nm))) symlinkSync(join(code, nm), join(dir, nm));
+    if (!excluded.split('\n').includes(`/${nm}`)) appendFileSync(exclude, `/${nm}\n`);
+  }
+  // The company list to scan; title filters still need setting for this person's roles.
+  if (existsSync(join(code, 'portals.yml'))) copyFileSync(join(code, 'portals.yml'), join(dir, 'portals.yml'));
+  rememberProfile(label, dir);
+  switchProfile(dir);
+}
+// A worktree profile follows the main checkout's latest commit, unless it has local code edits or a run is going.
+function syncProfileCode() {
+  try {
+    const code = codeRoot(ROOT);
+    if (real(code) === real(ROOT) || existsSync(join(ROOT, 'autoapply/.workflow.lock'))) return;
+    try { git('-C', ROOT, 'symbolic-ref', '-q', 'HEAD'); return; } catch { /* detached: ours to move */ }
+    const want = git('-C', code, 'rev-parse', 'HEAD');
+    if (git('-C', ROOT, 'rev-parse', 'HEAD') === want || git('-C', ROOT, 'status', '--porcelain', '--untracked-files=no')) return;
+    git('-C', ROOT, 'checkout', '--quiet', '--detach', want);
+  } catch (e) { console.error('profile code sync skipped:', e.message); }
+}
+function setMenu() {
+  const list = profileList();
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
+    { role: 'fileMenu' }, { role: 'editMenu' }, { role: 'viewMenu' },
+    { label: 'Profiles', submenu: [
+      ...list.map((p) => ({ label: `${p.name}  (${p.root.replace(homedir(), '~')})`, type: 'radio', checked: p.current, enabled: p.ok, click: () => { if (!p.current) switchProfile(p.root); } })),
+      { type: 'separator' },
+      { label: 'New profile… (Settings → Profiles)', enabled: ROOT_OK, click: () => win?.webContents.executeJavaScript(`(() => { document.querySelector('[data-nav="settings"]')?.click(); setTimeout(() => document.querySelector('[data-s-tab="folder"]')?.click(), 300); })()`) },
+    ] },
+    { role: 'windowMenu' },
+  ]));
+}
 const PATH = [join(homedir(), '.local/bin'), join(homedir(), '.opencode/bin'), '/opt/homebrew/bin', '/home/linuxbrew/.linuxbrew/bin', '/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(':');
 const STATES = ['Applied', 'Responded', 'Interview', 'Offer', 'Rejected', 'Discarded'];
 
@@ -93,7 +158,7 @@ function createWindow() {
 
 function watchFiles() {
   let timer;
-  const ping = () => { clearTimeout(timer); timer = setTimeout(() => win?.webContents.send('data:changed'), 600); };
+  const ping = () => { clearTimeout(timer); timer = setTimeout(() => { if (win && !win.isDestroyed()) win.webContents.send('data:changed'); }, 600); };
   for (const rel of ['autoapply/results', 'autoapply/outreach', 'autoapply/inbox', 'data']) {
     const p = join(ROOT, rel);
     if (existsSync(p)) try { watch(p, ping); } catch { /* dir vanished */ }
@@ -130,15 +195,16 @@ app.whenReady().then(() => {
     if (pick.canceled) return { ok: false };
     const dir = pick.filePaths[0];
     if (!isRoot(dir)) return { ok: false, error: `${dir} is not a career-ops folder with autoapply/ and desktop/ in it.` };
-    mkdirSync(dirname(PREFS), { recursive: true });
-    writeFileSync(PREFS, JSON.stringify({ ...prefs, root: dir }, null, 1));
-    app.relaunch(); app.exit(0);
+    rememberProfile(ownerName(dir) || basename(dir), dir);
+    switchProfile(dir);
     return { ok: true };
   });
-  ipcMain.handle('root:get', () => ({ root: ROOT, ok: ROOT_OK }));
+  ipcMain.handle('root:get', () => ({ root: ROOT, ok: ROOT_OK, profiles: profileList() }));
+  ipcMain.handle('profiles:switch', guard((_e, root) => switchProfile(String(root))));
+  ipcMain.handle('profiles:create', guard((_e, name) => createProfile(name)));
   ipcMain.handle('settings:get', guard(async () => {
     const s = await settings(), d = await data();
-    return { ...s.readSettings(ROOT), questions: s.openQuestions(d.loadAll(ROOT).apps, ROOT) };
+    return { ...s.readSettings(ROOT), questions: s.openQuestions(d.loadAll(ROOT).apps, ROOT), profiles: profileList() };
   }));
   ipcMain.handle('settings:save', guard(async (_e, patch) => (await settings()).saveFacts(ROOT, patch)));
   ipcMain.handle('settings:env', guard(async (_e, vals) => (await settings()).saveEnv(ROOT, vals)));
@@ -171,6 +237,8 @@ app.whenReady().then(() => {
   ipcMain.handle('run:stop', guard(async () => stopRun()));
   ipcMain.handle('settings:email-test', () => run('python3', ['-I', join(ROOT, 'autoapply/mail.py'), 'login']));
 
+  if (ROOT_OK) syncProfileCode();
+  setMenu();
   createWindow();
   if (process.env.CO_SNAPSHOT) snapshots(process.env.CO_SNAPSHOT);
   if (!ROOT_OK) return;

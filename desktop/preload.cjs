@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('co', {
   onChange: (fn) => ipcRenderer.on('data:changed', fn),
   root: () => ipcRenderer.invoke('root:get'),
   chooseRoot: () => ipcRenderer.invoke('root:choose'),
+  switchProfile: (root) => ipcRenderer.invoke('profiles:switch', root),
+  createProfile: (name) => ipcRenderer.invoke('profiles:create', name),
   settings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (patch) => ipcRenderer.invoke('settings:save', patch),
   saveEnv: (vals) => ipcRenderer.invoke('settings:env', vals),

@@ -3,8 +3,8 @@
 
 let S = null; // last settings snapshot from the main process
 
-const DEDICATED = new Set(['contact', 'work_authorization', 'outreach', 'limits', 'profile', 'resume', 'consent', 'schedule', 'salary', 'answers_from_app', 'models']);
-const SET_TABS = [['profile', 'Profile'], ['email', 'Email account'], ['resume', 'Resume & CV'], ['writing', 'Outreach writing'], ['answers', 'Answer bank'], ['run', 'Run controls'], ['folder', 'Folder']];
+const DEDICATED = new Set(['contact', 'work_authorization', 'outreach', 'limits', 'profile', 'resume', 'consent', 'schedule', 'salary', 'answers_from_app', 'models', 'effort']);
+const SET_TABS = [['profile', 'Profile'], ['email', 'Email account'], ['resume', 'Resume & CV'], ['writing', 'Outreach writing'], ['answers', 'Answer bank'], ['run', 'Run controls'], ['folder', 'Profiles']];
 
 const get = (path, obj = S?.facts) => path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj);
 const human = (k) => String(k).replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
@@ -167,14 +167,17 @@ const cityRow = (c = '', v = {}) => `<tr><td><input class="c-name" value="${esc(
 
 function tabRun() {
   const sc = S.schedule || {};
+  const elsewhere = sc.installed && !sc.here;
+  const where = elsewhere ? (S.profiles || []).find((p) => p.root === sc.root)?.name || sc.root : '';
   return card('Auto-apply', `
     <div class="field"><label>Daily run</label><label class="switch"><input type="checkbox" data-s-toggle="pause" ${S.paused ? '' : 'checked'}><span></span></label><div class="hint">${S.paused ? 'Stopped: daily runs do nothing.' : 'Running.'}</div></div>
-    <div class="field"><label>Run every day at</label><div style="display:flex;gap:6px"><input id="run-at" type="time" value="${esc(sc.time || get('schedule.run_at') || '10:00')}"><button class="btn small" data-s-act="schedule-save">${sc.installed ? 'Update' : 'Turn on'}</button>${sc.installed ? '<button class="btn small" data-s-act="schedule-off">Remove</button>' : ''}</div>
-      <div class="hint">${sc.supported === false ? 'Scheduling works on macOS and Linux only.' : sc.installed ? `Scheduled at ${esc(sc.time)} (${esc(sc.label)}).` : 'Not scheduled.'} Your computer must be on (a missed day runs when it's back on).</div></div>
+    <div class="field"><label>Run every day at</label><div style="display:flex;gap:6px"><input id="run-at" type="time" value="${esc(sc.time || get('schedule.run_at') || '10:00')}"><button class="btn small" data-s-act="schedule-save">${elsewhere ? 'Move here' : sc.installed ? 'Update' : 'Turn on'}</button>${sc.installed && !elsewhere ? '<button class="btn small" data-s-act="schedule-off">Remove</button>' : ''}</div>
+      <div class="hint">${sc.supported === false ? 'Scheduling works on macOS and Linux only.' : elsewhere ? `The daily run is set for another profile (${esc(where)}) at ${esc(sc.time)}. Only one profile runs on a schedule; "Move here" switches it to this one.` : sc.installed ? `Scheduled at ${esc(sc.time)} (${esc(sc.label)}).` : 'Not scheduled.'} Your computer must be on (a missed day runs when it's back on).</div></div>
     ${field('Cold outreach', 'schedule.cold_outreach', { type: 'bool', hint: 'Emails companies you did not apply to.' })}
     <div class="field wide" id="run-now"><label>Run now</label><div class="hint">Checking…</div></div>`, { saveId: 'cold' })
   + card('AI models', `<div class="field wide" id="ai-status"><div class="hint">Checking Claude Code and opencode…</div></div>` + [
     field('Filling applications', 'models.apply', { type: 'select', options: CLAUDE_MODELS, value: S.models.apply }),
+    field('Application thinking effort', 'effort.apply', { type: 'select', options: [['', 'Use Claude Code setting'], ['low', 'Low — less thinking'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'Extra high'], ['max', 'Maximum']], hint: 'Lower effort can reduce usage. Complex forms may need more thinking.' }),
     field('Writing emails', 'models.outreach', { type: 'select', options: CLAUDE_MODELS, value: S.models.outreach }),
     field('Reading unclear inbox emails', 'models.inbox', { type: 'select', options: CLAUDE_MODELS, value: S.models.inbox }),
     field('Turning your resume PDF into cv.md', 'models.cv', { type: 'select', options: CLAUDE_MODELS, value: S.models.cv }),
@@ -196,9 +199,14 @@ function tabRun() {
 }
 
 function tabFolder() {
-  return card('career-ops folder', `<div class="field wide"><label>Current folder</label><div class="mono">${esc(S.root)}</div>
-    <div class="hint">All your data lives here: config/, cv.md, data/, autoapply/. The app reloads after you change it.</div></div>
-    <div class="set-actions"><button class="btn small" data-reveal="config/apply-facts.yml">Show settings file</button><button class="btn small" data-s-act="root">Change folder…</button></div>`);
+  const rows = (S.profiles || []).map((p) => `<div class="field wide"><label>${esc(p.name)}${p.current ? ' · open now' : ''}</label>
+    <div style="display:flex;gap:8px;align-items:center"><span class="mono" style="flex:1">${esc(p.root)}</span>${p.current ? '' : p.ok ? `<button class="btn small" data-s-act="profile-switch" data-root="${esc(p.root)}">Switch</button>` : '<span class="missing">folder missing</span>'}</div></div>`).join('');
+  return card('Profiles', `${rows}
+    <div class="field wide"><div class="hint">Each profile is its own folder with its own CV, settings, Gmail account, job-site logins and applications. The app reloads after you switch.</div></div>
+    <div class="set-actions"><button class="btn small" data-reveal="config/apply-facts.yml">Show settings file</button><button class="btn small" data-s-act="root">Add existing folder…</button></div>`)
+  + card('New profile', `<div class="field"><label>Name</label><input id="profile-name" placeholder="e.g. Sara"></div>
+    <div class="field wide"><div class="hint">Makes a new folder in ~/career-ops-profiles that shares this app's code, then opens it with first-run setup. Code updates you commit here reach it the next time it opens.</div></div>`,
+    { actions: '<button class="btn primary small" data-s-act="profile-new">Create</button>' });
 }
 
 function renderSettingsInto() {
@@ -332,6 +340,15 @@ document.addEventListener('click', async (ev) => {
     case 'schedule-save': { const r = await window.co.setSchedule($('#run-at').value); if (!r.ok) return toast(r.error, 0); S = { ...S, ...r.value }; toast(`Daily run set for ${$('#run-at')?.value || ''}.`); return renderSettingsInto(); }
     case 'schedule-off': { const r = await window.co.setSchedule(null); if (!r.ok) return toast(r.error, 0); S = { ...S, ...r.value }; toast('Daily run removed.'); return renderSettingsInto(); }
     case 'root': { const r = await window.co.chooseRoot(); if (r?.error) toast(r.error, 0); return; }
+    case 'profile-switch': { const r = await window.co.switchProfile(d.root); if (!r.ok) toast(r.error, 0); return; }
+    case 'profile-new': {
+      const name = $('#profile-name').value.trim();
+      if (!name) return toast('Give the profile a name.');
+      t.disabled = true; t.textContent = 'Creating…';
+      const r = await window.co.createProfile(name);
+      if (!r.ok) { t.disabled = false; t.textContent = 'Create'; return toast(r.error, 0); }
+      return;
+    }
   }
 });
 
@@ -416,7 +433,8 @@ document.addEventListener('click', async (ev) => {
     const r = await window.co.saveSettings(collect(body)); if (!r.ok) { b.disabled = false; return toast(r.error, 0); }
     S = { ...S, ...r.value };
     const time = $('#run-at').value;
-    if (time && S.schedule?.supported) { const s = await window.co.setSchedule(time); if (!s.ok) toast(s.error, 0); }
+    // Never take the daily run from another profile without asking: that is a button in Run controls.
+    if (time && S.schedule?.supported && (!S.schedule.installed || S.schedule.here)) { const s = await window.co.setSchedule(time); if (!s.ok) toast(s.error, 0); }
     $('.wizard').remove();
     toast('All set. Settings has more options (answer bank, outreach writing, salary).', 6000);
     return reload();

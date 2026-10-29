@@ -37,6 +37,16 @@ answers to common form questions, so your first runs don't get stuck.
 | Resume PDF | `output/master/…` (Settings → Resume) |
 | Daily run | macOS: `~/Library/LaunchAgents/com.careerops.daily.plist` · Linux: `~/.config/systemd/user/careerops-daily.timer` or a crontab line (Settings → Run controls) |
 
+## Profiles (more than one person)
+
+Settings → Profiles → **New profile** makes `~/career-ops-profiles/<name>`, a git worktree of this checkout
+with its own CV, `config/apply-facts.yml`, `.env` (Gmail), job-site logins, tracker and results. It shares
+`node_modules` and starts with a copy of `portals.yml` (change its `title_filter` for that person's roles).
+Switch profiles there or from the **Profiles** menu. A profile's code moves to this checkout's latest
+commit each time it opens (unless a run is going or its code was edited); uncommitted changes don't reach it.
+Only one profile runs on a schedule: Run controls shows which one has it, and "Move here" moves it.
+For career-ops modes in Claude Code, run `claude` inside that profile's folder.
+
 The installed app is only a launcher: it loads `desktop/` from your career-ops folder, so code changes show up
 on the next start. Rebuild (`npm run install-app`) only after changing `main.mjs` or `preload.cjs`.
 

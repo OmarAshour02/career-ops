@@ -120,6 +120,44 @@ function renderNav() {
 }
 
 // ---------- overview ----------
+const OVERVIEW_STATUSES = [
+  ['applied', 'Waiting', 'var(--silver)'], ['responded', 'In process', 'var(--almond)'],
+  ['interview', 'Interview', 'var(--salmon)'], ['offer', 'Offer', 'var(--almond)'],
+  ['rejected', 'Rejected', '#8E83A0'], ['closed', 'Closed', 'var(--faint)'],
+];
+
+function renderSankey(apps) {
+  if (!apps.length) return '<div class="empty">Your application flow will appear once you send an application.</div>';
+  const outcomes = OVERVIEW_STATUSES.map(([key, label, color]) => ({
+    label, color, n: apps.filter((a) => statusKey(a) === key).length,
+  })).filter((o) => o.n);
+  // The source and destinations have equal total height; gaps only separate destinations.
+  const flowHeight = 190, gap = 24, top = 24;
+  const height = top * 2 + flowHeight + gap * (outcomes.length - 1);
+  const sourceY = (height - flowHeight) / 2;
+  let sourceOffset = sourceY, targetOffset = top;
+  const flows = outcomes.map(({ label, color, n }) => {
+    const h = flowHeight * n / apps.length;
+    const sy = sourceOffset, ty = targetOffset;
+    sourceOffset += h; targetOffset += h + gap;
+    const description = `${label}: ${n} of ${apps.length} (${(n / apps.length * 100).toFixed(1)}%)`;
+    return `<g class="sankey-flow" tabindex="0" role="img" aria-label="${esc(description)}">
+      <title>${esc(description)}</title>
+      <path d="M190,${sy} C420,${sy} 470,${ty} 700,${ty} L700,${ty + h} C470,${ty + h} 420,${sy + h} 190,${sy + h} Z" fill="${color}" class="sankey-ribbon"/>
+      <rect x="700" y="${ty}" width="8" height="${h}" fill="${color}"/>
+      <text x="724" y="${ty + h / 2}" dominant-baseline="middle" class="sankey-label">${label}<tspan class="sankey-count" dx="10">${n}</tspan></text>
+    </g>`;
+  }).join('');
+  return `<div class="sankey-scroll"><svg class="sankey" viewBox="0 0 940 ${height}" role="img" aria-labelledby="sankey-title sankey-desc">
+    <title id="sankey-title">Application flow</title>
+    <desc id="sankey-desc">${apps.length} sent applications by current status. Band widths are proportional to application counts. ${outcomes.map((o) => `${o.label}: ${o.n}`).join('. ')}.</desc>
+    ${flows}
+    <rect x="182" y="${sourceY}" width="8" height="${flowHeight}" fill="var(--accent)"/>
+    <text x="162" y="${height / 2 - 10}" text-anchor="end" class="sankey-label">Applications sent</text>
+    <text x="162" y="${height / 2 + 15}" text-anchor="end" class="sankey-total">${apps.length}</text>
+  </svg></div>`;
+}
+
 function renderOverview() {
   const s = sent();
   const count = (k) => s.filter((a) => statusKey(a) === k).length;
@@ -139,7 +177,7 @@ function renderOverview() {
       + (x.n ? `<text x="${i * bw + bw / 2}" y="${H - 22 - h}" text-anchor="middle" class="axis">${x.n}</text>` : '')
       + (i % 3 === 0 || i === days - 1 ? `<text x="${i * bw + bw / 2}" y="${H - 4}" text-anchor="middle" class="axis">${fmtDate(x.d)}</text>` : '');
   }).join('');
-  const funnel = [['applied', 'Waiting', 'var(--silver)'], ['responded', 'In process', 'var(--almond)'], ['interview', 'Interview', 'var(--salmon)'], ['offer', 'Offer', 'var(--almond)'], ['rejected', 'Rejected', '#8E83A0'], ['closed', 'Closed', 'var(--grape)']]
+  const funnel = OVERVIEW_STATUSES
     .map(([k, label, color]) => { const n = count(k); return `<div class="funnel-row"><span>${label}</span><div class="bar"><i style="width:${s.length ? (n / s.length) * 100 : 0}%;background:${color}"></i></div><span class="num" style="text-align:right">${n}</span></div>`; }).join('');
   const feed = D.events.filter((e) => !['received', 'other'].includes(e.kind)).slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 9);
   const roleOut = D.outreach.filter((o) => o.kind === 'role'), cold = D.outreach.filter((o) => o.kind === 'cold');
@@ -157,6 +195,7 @@ function renderOverview() {
       <div class="card chart"><h2>Applications per day<span class="hint">last ${days} days</span></h2><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${bars}</svg></div>
       <div class="card"><h2>Where they are</h2><div class="funnel">${funnel}</div></div>
     </div>
+    <div class="card sankey-card"><h2>Application flow<span class="hint">sent → current status</span></h2>${renderSankey(s)}</div>
     <div class="grid-2">
       <div class="card"><h2>Latest from your inbox<span class="hint"><a data-nav="inbox">See all</a></span></h2>
         <div class="feed">${feed.length ? feed.map((e) => `<div class="feed-item" ${e.num ? `data-open-app="${e.num}"` : 'data-nav="inbox"'}>
@@ -426,4 +465,10 @@ document.addEventListener('keydown', (e) => {
 // Live file changes redraw lists, but never under a half-filled settings form.
 window.co.onChange(() => { if (ui.view !== 'settings') reload(); });
 // settings.js loads after this file: start once every script has run.
-window.addEventListener('DOMContentLoaded', () => reload().then(() => maybeSetup()));
+// With more than one profile, the sidebar names whose applications these are.
+async function showProfile() {
+  const r = await window.co.root();
+  const cur = r?.profiles?.length > 1 && r.profiles.find((p) => p.current);
+  if (cur) $('.brand').insertAdjacentHTML('beforeend', `<span class="brand-profile">${esc(cur.name)}</span>`);
+}
+window.addEventListener('DOMContentLoaded', () => { showProfile(); reload().then(() => maybeSetup()); });

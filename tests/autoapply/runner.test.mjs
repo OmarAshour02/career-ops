@@ -9,6 +9,7 @@ import { usageSummary } from '../../autoapply/usage.mjs';
 
 const fakeWorker = `
 const fs = require('fs');
+fs.writeFileSync('worker-argv.json', JSON.stringify(process.argv.slice(2)));
 const mode = process.argv[2];
 const mi = process.argv.indexOf('--mcp-config');
 if (mi >= 0 && process.argv[mi + 2] !== '--') throw new Error('prompt swallowed by variadic --mcp-config');
@@ -76,12 +77,82 @@ test('worker gets isolated stdin; dry run records usage without legacy writes', 
   assert.equal(b.attempts[0].usage.tokens.cache_read_input_tokens, 30);
   assert.equal(existsSync(join(f.root, 'autoapply/results/001.json')), false);
   assert.equal(usageSummary(f.root, { mode: 'dry-run' }).stages.fast.median_first_input_tokens, 60);
+  const groups = Object.values(usageSummary(f.root, { mode: 'dry-run' }).configurations);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].attempts, 1);
+  assert.equal(groups[0].confirmed_submissions, 0);
+  assert.equal(groups[0].mean_initial_input_tokens, 60);
 });
-test('worker prompt tells the worker to solve CAPTCHAs', async t => {
+test('application effort reaches the worker, is logged, and can be overridden per run', async t => {
+  for (const override of [null, 'medium']) {
+    const f = fixture(t);
+    writeFileSync(join(f.root, 'config/apply-facts.yml'), 'effort:\n  apply: low\n');
+    f.options.effort = override;
+    const b = await runBatch(f);
+    const args = JSON.parse(readFileSync(join(f.root, 'worker-argv.json'), 'utf8'));
+    assert.equal(b.attempts[0].status, 'dry_run_ok');
+    assert.equal(args[args.indexOf('--effort') + 1], override || 'low');
+    assert.equal(b.attempts[0].effort, override || 'low');
+  }
+});
+test('effort rejects typos rather than silently using the global default', async t => {
+  assert.equal(optionsFrom(['--effort', 'low']).effort, 'low');
+  assert.throws(() => optionsFrom(['--effort', 'lo']), /Invalid effort/);
+  assert.throws(() => optionsFrom(['--effort']), /Missing --effort/);
+  const f = fixture(t);
+  writeFileSync(join(f.root, 'config/apply-facts.yml'), 'effort:\n  apply: lo\n');
+  await assert.rejects(runBatch(f), /Invalid effort/);
+});
+test('empty effort preserves the existing Claude Code setting', async t => {
+  const f = fixture(t); f.options.effort = null;
+  writeFileSync(join(f.root, 'config/apply-facts.yml'), 'effort:\n  apply: ""\n');
+  const b = await runBatch(f);
+  const args = JSON.parse(readFileSync(join(f.root, 'worker-argv.json'), 'utf8'));
+  assert.equal(b.attempts[0].status, 'dry_run_ok');
+  assert.equal(args.includes('--effort'), false);
+});
+test('compact fast prompt retains the complete rendered application rules', async t => {
   const f = fixture(t); const b = await runBatch(f);
   const prompt = readFileSync(join(f.root, 'autoapply/attempts', b.attempts[0].attempt_id, 'prompt.md'), 'utf8');
-  assert.match(prompt, /CAPTCHA → solve it yourself/);
-  assert.doesNotMatch(prompt, /never solve it yourself/);
+  const dir = join(f.root, 'autoapply/attempts', b.attempts[0].attempt_id);
+  const rules = readFileSync(join(dir, 'apply-instructions.md'), 'utf8');
+  assert.ok(prompt.includes(join(dir, 'apply-instructions.md')));
+  assert.match(rules, /CAPTCHA: solve it yourself/);
+  assert.match(rules, /Never invent a fact/);
+  assert.match(rules, /no_ai_policy/);
+  assert.match(rules, /Mode `dry-run`: do NOT click Submit/);
+  assert.match(rules, /submitted.png/);
+  assert.match(rules, /WHOLE form/);
+  assert.match(rules, /There is no snapshot\s+cap/);
+  assert.ok(rules.includes(join(dir, 'payload.json')));
+  assert.doesNotMatch(rules, /\{\{[A-Z]+\}\}/);
+  assert.doesNotMatch(rules, /autoapply\/results\/001.json/);
+  const args = JSON.parse(readFileSync(join(f.root, 'worker-argv.json'), 'utf8'));
+  assert.equal(args[args.indexOf('--tools') + 1], 'Bash,Read,Write,Edit,WebFetch,WebSearch');
+  assert.ok(args.includes('--disable-slash-commands'));
+});
+test('API question previews cannot introduce an early rejection or change worker count', async t => {
+  const f = fixture(t);
+  f.jobs = [1,2,3].map(n => ({ ...f.jobs[0], url: `https://jobs.example/${n}` }));
+  let calls = 0;
+  f.formPreviewFn = async () => ++calls === 1 ? { status: 'available', questions: [{ label: 'Conditional clearance', required: true }] } : calls === 2 ? { status: 'unavailable' } : Promise.reject(new Error('API down'));
+  const b = await runBatch(f);
+  assert.equal(b.attempts.length, 3);
+  assert.ok(b.attempts.every(a => a.status === 'dry_run_ok'));
+  assert.deepEqual(b.attempts.map(a => a.form_preview), ['available', 'unavailable', 'unavailable']);
+  const prompt = readFileSync(join(f.root, 'autoapply/attempts', b.attempts[0].attempt_id, 'prompt.md'), 'utf8');
+  assert.match(prompt, /NEVER skip, stop with needs_answer, or fill a field based on this preview alone/);
+  assert.match(prompt, /WHOLE live form/);
+});
+test('a failed JD API fetch is not repeated by the worker and never rejects the job', async t => {
+  const f = fixture(t); f.options.prescore = true;
+  f.prescoreFn = async () => ({ decision: 'unknown', error: 'jd_unavailable' });
+  const b = await runBatch(f);
+  assert.equal(b.attempts[0].status, 'dry_run_ok');
+  assert.equal(b.attempts[0].prescore.note, 'jd_unavailable');
+  const prompt = readFileSync(join(f.root, 'autoapply/attempts', b.attempts[0].attempt_id, 'prompt.md'), 'utf8');
+  assert.match(prompt, /Do not repeat fetch-jd.mjs/);
+  assert.match(prompt, /must not cause a skip/);
 });
 test('quota trips a persistent breaker and prevents remaining dispatch', async t => {
   const f = fixture(t); f.workerPrefix[1] = 'quota';
@@ -138,6 +209,14 @@ test('confirmed result reconciles using explicit report selector and stays dedup
   assert.equal((await runBatch(f)).attempts.length, 0);
   assert.equal(eligibleAttempt(attemptRecords(f.root), { ...f.options, stage: 'apply', url: f.jobs[0].url }), false);
 });
+test('a job retried after answered questions updates its first tracker row', async t => {
+  const f = fixture(t); f.workerPrefix[1] = 'submitted'; f.options.mode = 'live';
+  writeFileSync(join(f.root, 'data/applications.md'), '| # | Date | Company | Role | Score | Status | PDF | Report | Notes |\n|---|---|---|---|---|---|---|---|---|\n| 812 | 2026-10-28 | Example | Engineer | 3/5 | Evaluated | ✅ | [812](../reports/812-example.md) | autoapply needs_answer |\n');
+  writeFileSync(join(f.root, 'autoapply/results/812.json'), JSON.stringify({ status: 'needs_answer', url: 'https://jobs.example/1' }));
+  const r = (await runBatch(f)).attempts[0];
+  assert.equal(r.status, 'submitted'); assert.equal(r.reconciled, true); assert.notEqual(r.num, '812');
+  assert.deepEqual(JSON.parse(readFileSync(join(f.root, 'selector.json'))).slice(0, 3), ['--row', '812', 'Applied']);
+});
 test('unexpected submission in dry-run stops dispatch and requires reconciliation', async t => {
   const f = fixture(t); f.workerPrefix[1] = 'submitted';
   f.jobs.push({ ...f.jobs[0], url: 'https://jobs.example/2' });
@@ -192,8 +271,12 @@ test('repeated prescore errors fall back to normal workers without tripping the 
   const f = fixture(t); f.options = optionsFrom(['--prescore']);
   f.jobs = [1, 2, 3, 4].map(n => ({ company: 'Example', role: 'Engineer', url: `https://jobs.example/${n}` }));
   let calls = 0; f.prescoreFn = async () => { calls++; throw new Error('provider.auth'); };
+  let fetches = 0; f.prefetchFn = async () => { fetches++; return 'Full prefetched JD after the screening provider stopped.'; };
   const b = await runBatch(f);
   assert.equal(calls, 3); assert.equal(b.blocked, null);
+  assert.equal(fetches, 1);
+  const last = b.attempts.at(-1);
+  assert.equal(readFileSync(join(f.root, 'autoapply/attempts', last.attempt_id, 'jd.md'), 'utf8'), 'Full prefetched JD after the screening provider stopped.');
   assert.deepEqual(b.attempts.map(a => a.status), ['dry_run_ok', 'dry_run_ok', 'dry_run_ok', 'dry_run_ok']);
 });
 test('prescore parsing rejects unknown reasons and reads OpenCode session usage', async () => {
@@ -248,16 +331,20 @@ if (cmd === 'session' && rest[0] === 'export') console.log(JSON.stringify({ info
   assert.equal((await prescore(root, job, opts)).error, 'free_model_paused');
   assert.deepEqual(calls(), ['opencode/x-free -']);
 
-  // Key in .env: the paid model scores the job and the call is counted.
+  // Key in .env: the paid model is called on DeepSeek's API (not OpenCode) and the call is counted.
   writeFileSync(join(root, '.env'), 'DEEPSEEK_API_KEY="sk-test"\n');
+  const api = [], realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => { api.push([url, init.headers.authorization, JSON.parse(init.body).model]); return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '{"score":1.5,"skip_reason":"too_senior","note":"Staff"}' } }], usage: { prompt_tokens: 10, completion_tokens: 3 } }) }; };
+  t.after(() => { globalThis.fetch = realFetch; });
   const paid = await prescore(root, job, opts);
   assert.equal(paid.decision, 'skip'); assert.equal(paid.model, 'deepseek/x'); assert.equal(paid.reason, 'too_senior');
-  assert.deepEqual(calls(), ['opencode/x-free -', 'deepseek/x sk-test']);
-  assert.equal(readBudget(root).paid_calls, 1); assert.equal(readBudget(root).paid_cost_usd, 0.002);
+  assert.deepEqual(api, [['https://api.deepseek.com/chat/completions', 'Bearer sk-test', 'x']]);
+  assert.deepEqual(calls(), ['opencode/x-free -']);
+  assert.equal(readBudget(root).paid_calls, 1);
 
   // Cap reached: no more paid calls today.
   assert.equal((await prescore(root, job, opts)).error, 'paid_daily_cap');
-  assert.equal(calls().length, 2);
+  assert.equal(api.length, 1);
 });
 test('hunter helper needs a key, keeps source URLs, and never sends the key in output', async () => {
   const { hunter } = await import('../../autoapply/hunter.mjs');
@@ -336,4 +423,46 @@ test('live runs refuse while cv.md is empty', async t => {
   writeFileSync(join(f.root, 'cv.md'), '\n');
   const live = await runBatch({ ...f, options: optionsFrom(['--live']) });
   assert.deepEqual([live.blocked, live.attempts.length], ['no_cv', 0]);
+});
+
+test('auto pre-score falls back to Claude Haiku when the free model is down and there is no DeepSeek key', async t => {
+  const { prescore } = await import('../../autoapply/prescore.mjs');
+  const root = mkdtempSync(join(tmpdir(), 'autoapply-prescore-')); t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, 'modes')); writeFileSync(join(root, 'modes/_brief.md'), 'Backend engineer.');
+  mkdirSync(join(root, 'sandbox'));
+  const oc = join(root, 'opencode'), cl = join(root, 'claude'), log = join(root, 'claude.log');
+  writeFileSync(oc, `#!/usr/bin/env node
+const [cmd] = process.argv.slice(2);
+if (cmd === 'run') console.log(JSON.stringify({ type: 'error', sessionID: 's1', error: { type: 'provider.quota' } }));
+if (cmd === 'session') console.log(JSON.stringify({ info: {}, messages: [] }));
+`, { mode: 0o755 });
+  writeFileSync(cl, `#!/usr/bin/env node
+require('fs').appendFileSync(${JSON.stringify(log)}, 'call\\n');
+console.log(JSON.stringify({ type: 'result', result: '{"score":1,"skip_reason":"location","note":"US only"}' }));
+`, { mode: 0o755 });
+  const env = { AUTOAPPLY_OPENCODE_BIN: process.env.AUTOAPPLY_OPENCODE_BIN, AUTOAPPLY_CLAUDE_BIN: process.env.AUTOAPPLY_CLAUDE_BIN, DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY };
+  process.env.AUTOAPPLY_OPENCODE_BIN = oc; process.env.AUTOAPPLY_CLAUDE_BIN = cl; delete process.env.DEEPSEEK_API_KEY;
+  t.after(() => { for (const [k, v] of Object.entries(env)) v === undefined ? delete process.env[k] : process.env[k] = v; });
+  const job = { company: 'Example', role: 'Engineer', url: 'https://jobs.example/1' };
+  const opts = { jd: 'JD text', dir: join(root, 'sandbox'), model: 'auto' };
+  // First call: free model fails, Claude answers. Second: free model is paused, Claude answers directly.
+  for (let i = 0; i < 2; i++) {
+    const r = await prescore(root, job, opts);
+    assert.deepEqual([r.decision, r.reason, r.model], ['skip', 'location', 'claude-haiku-5-5']);
+  }
+  assert.equal(readFileSync(log, 'utf8').trim().split('\n').length, 2);
+});
+test('browser hider only runs on macOS, hides Chrome for Testing only, and stops cleanly', async () => {
+  const { startHider } = await import('../../autoapply/hide-browser.mjs');
+  const calls = [];
+  const run = (bin, args, opts, done) => { calls.push([bin, args.at(-1)]); setImmediate(done); };
+  startHider({ platform: 'linux', run })();
+  assert.equal(calls.length, 0);
+  const stop = startHider({ platform: 'darwin', everyMs: 10, run });
+  await new Promise(r => setTimeout(r, 55));
+  stop();
+  const n = calls.length;
+  await new Promise(r => setTimeout(r, 30));
+  assert.ok(n >= 3, `ticks: ${n}`); assert.equal(calls.length, n);
+  assert.equal(calls[0][0], 'osascript'); assert.match(calls[0][1], /com\.google\.chrome\.for\.testing/);
 });

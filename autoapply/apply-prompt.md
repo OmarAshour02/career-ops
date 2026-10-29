@@ -145,8 +145,17 @@ in this voice. Read `voice-dna.md` for extra style, but simple English wins.
 
 ## Steps
 
+Use the latest complete page state already returned by a browser action. Do not
+request another full `browser_snapshot` just to repeat the same unchanged state.
+For a known field, prefer `browser_find` or a targeted snapshot when supported.
+Batch independent fields with `browser_fill_form`. After navigation, conditional
+questions, validation errors, stale refs or uncertain state, get a fresh snapshot;
+use a full snapshot whenever needed to inspect the WHOLE form. There is no snapshot
+cap. Keep the required filled-form and submission evidence screenshots.
+
 1. `browser_navigate` to the URL. If it is a company page with an embedded Greenhouse
-   form, find the form or the "Apply" button. Snapshot.
+   form, find the form or the "Apply" button. Obtain a complete form snapshot if
+   the action did not already return one.
 2. Liveness check (see rules above).
 3. Read the WHOLE form first. List every field. Check every required field has a source.
    If any required field has no source → `needs_answer` (list all such questions), stop.

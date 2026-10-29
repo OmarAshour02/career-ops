@@ -91,6 +91,7 @@ consent:
 
 schedule:
   run_at: "10:00"
+  hide_browser: false           # macOS: true keeps the apply browser hidden while it works
   cold_outreach: false
 
 # AI model per job (needs Claude Code installed and logged in).
@@ -101,3 +102,9 @@ models:
   inbox: claude-haiku-5-5
   cv: claude-sonnet-5-5
   prescore: auto
+
+# Thinking effort per worker family: low, medium, high, xhigh, max.
+# Empty uses Claude Code's existing setting. --effort / AUTOAPPLY_EFFORT overrides this.
+effort:
+  apply: ""
+  outreach: ""

@@ -65,38 +65,16 @@ Write `reports/{{NUM}}-{company-slug}-{{DATE}}.md`:
 
 ## Step 4 — Apply (only if not skipped)
 
-Follow `autoapply/apply-prompt.md` sections "Sources of truth", "Hard rules" and
-"Free-text answers" exactly. Short version:
-
-- Answers come ONLY from `config/apply-facts.yml`, `config/profile.yml`, `cv.md`.
-- Never invent anything. A required question with no source → stop, don't submit,
-  status `needs_answer`, list the exact question(s). But easy questions (same meaning as a
-  saved answer, consent boxes, conflict-of-interest "No", a tool not in `cv.md` → "No",
-  dates from `availability`) are NOT missing: answer them, as the "Easy questions" rule in
-  `autoapply/apply-prompt.md` says.
-- Sponsorship, years of experience, degree, location: always the truth.
-- {{ACCOUNTS}}
-- The form asks {{FIRST}} to agree that no AI is used in the application (e.g. "only my own
-  words", "do not use AI tools") → do not agree, do not submit. `skipped`, reason `no_ai_policy`.
-- Email verification code → get it with `autoapply/mail.py code` exactly as
-  `autoapply/apply-prompt.md` says. Never open or read the mailbox any other way.
-- CAPTCHA → solve it yourself: click the checkbox, then use the exact scan/click
-  snippets in the CAPTCHA rule of `autoapply/apply-prompt.md` for up to 3 puzzle rounds.
-  Only if that fails, alert {{FIRST}} and wait at most 3 minutes; still no confirmation
-  → `skipped`, reason `captcha`.
-- The site says the application was flagged as spam or as a bot (e.g. "flagged as possible
-  spam") → do NOT submit again. `skipped`, reason `spam_flagged`.
-- Free text in {{FIRST}}'s voice: {{VOICE}}, no buzzwords, no em dashes.
-  One real detail from the JD + one real proof point with its real number from `cv.md`.
-- Upload {{PDF}} as the resume.
-
-Flow: open the form, read ALL fields first, check every required field has a source, fill,
-upload, screenshot `{{NUM}}-filled.png`, then in `live` mode click Submit, wait for the
-confirmation, screenshot `{{NUM}}-submitted.png`.
+Before interacting with the application form, Read `{{APPLYRULES}}` ONCE and follow
+ALL of its source-of-truth, hard, free-text, browser, result and evidence rules.
+This is the complete apply-prompt.md rendered for this attempt, including the correct
+resume path, account rules, mode and result destination. Do not also read the raw template.
+No invented facts. Confirm every required field against sources before filling;
+unknown required facts on the live form → `needs_answer`. Dry-run never submits.
 
 ## Step 5 — Result file (always write it)
 
-Write `autoapply/results/{{NUM}}.json` with the same shape as in `autoapply/apply-prompt.md`,
+Write `autoapply/results/{{NUM}}.json` with the same shape as in `{{APPLYRULES}}`,
 plus `"score": X.X` and `"report": "reports/<file>.md"`. Status is one of
 `submitted | dry_run_ok | needs_answer | skipped | failed`.
 

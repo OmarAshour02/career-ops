@@ -29,6 +29,30 @@ outreach). Application and mail daily sending limits still come from
 selects a model; otherwise the current CLI default is preserved and the observed
 model is logged. No automatic model switching.
 
+Thinking effort can be set with `--effort low` (or medium/high/xhigh/max),
+`AUTOAPPLY_EFFORT`, or `effort.apply` / `effort.outreach` in
+`config/apply-facts.yml`, in that precedence order. Empty settings preserve
+Claude Code's existing effort. The resolved override is stored in attempt records.
+Lower effort can reduce thinking tokens; savings and form completion quality need
+to be measured on actual runs.
+
+Application workers use a smaller built-in tool set (file/shell/web tools plus
+the same Playwright server) and omit slash-command metadata. Normal repository
+instructions still load. Fast workers read the complete rendered application
+rules once after fit checking; no truthfulness, eligibility or evidence rules are
+removed. Reuse an action's current complete snapshot, with fresh/full snapshots
+whenever needed; no snapshot or retry limits are tightened.
+
+For Greenhouse, a public GET fetches advisory question metadata before browser
+work. It never rejects jobs or supplies candidate facts. Hidden/conditional/API
+questions must be checked against the whole live form. Other ATSs and API failures
+use the normal browser flow. A JD API miss is not retried by the same worker; if
+screening pauses, API-only JD prefetch continues without model screening.
+
+`usage.mjs` groups attempts by context version and effort, with token totals,
+initial context size and completion outcomes. Compare like-for-like roles and
+sites; token savings alone do not establish preserved completion quality.
+
 The runner's limits are process-enforced. Prompt instructions are not the retry
 or timeout mechanism. Jobs run at most once per batch. The daily attempt cap
 includes failures; reaching an application cap cannot cause unlimited attempts.

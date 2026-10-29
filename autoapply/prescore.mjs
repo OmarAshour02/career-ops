@@ -5,6 +5,7 @@
 // (no JD, model error, bad JSON) falls through to the normal fast worker.
 // When the free model is down (e.g. OpenCode blocks the IP), a paid DeepSeek
 // model takes over, but only with DEEPSEEK_API_KEY set and under a daily cap.
+// The paid call goes straight to DeepSeek's API (no OpenCode, so no tools at all).
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { homedir, tmpdir } from 'node:os';
@@ -17,7 +18,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 export const PRESCORE_MODEL = 'opencode/deepseek-v4.1-flash-free';
 // Used for 'auto' when opencode isn't installed.
 export const CLAUDE_PRESCORE = 'claude-haiku-5-5';
-export const PRESCORE_FALLBACK = process.env.AUTOAPPLY_PRESCORE_FALLBACK || 'deepseek/deepseek-v4-flash';
+export const PRESCORE_FALLBACK = process.env.AUTOAPPLY_PRESCORE_FALLBACK || 'deepseek/deepseek-flash';
 export const MAX_PAID_PER_DAY = Number(process.env.AUTOAPPLY_PRESCORE_MAX_PAID || 150);
 export const HARD_SKIPS = new Set(['too_senior', 'no_sponsorship', 'location', 'off_target', 'closed']);
 const JD_CAP = 12_000;
@@ -151,6 +152,28 @@ async function scoreWith(model, prompt, { cwd, timeoutMs, signal, env }) {
   return { model, usage: parsed.usage, verdict, error: verdict ? null : parsed.error || run.failure || 'unparsed_verdict', raw: parsed.text.slice(0, 500) };
 }
 
+// Paid DeepSeek: one plain chat call to the API. `deepseek/<id>` -> model <id>.
+async function scoreWithDeepseek(model, prompt, key, { timeoutMs, signal }) {
+  const started = Date.now();
+  const id = model.replace(/^deepseek\//, '');
+  let text = '', error = null, usage = { available: false, source: 'unavailable', tokens: null };
+  try {
+    const res = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      body: JSON.stringify({ model: id, messages: [{ role: 'user', content: prompt }], temperature: 0, stream: false }),
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) error = `deepseek_http_${res.status}`;
+    text = String(body.choices?.[0]?.message?.content ?? '');
+    if (body.usage) usage = { available: true, source: 'deepseek_api', tokens: { input_tokens: body.usage.prompt_tokens, output_tokens: body.usage.completion_tokens } };
+  } catch (e) { error = e?.name === 'TimeoutError' ? 'timeout' : 'deepseek_unreachable'; }
+  usage.models = [model];
+  const verdict = !error && parseVerdict(text);
+  return { model, usage, verdict, error: verdict ? null : error || 'unparsed_verdict', raw: text.slice(0, 500), duration_ms: Date.now() - started };
+}
+
 // Claude has no paid fallback or daily budget here: the owner's Claude plan covers it.
 async function scoreWithClaude(model, prompt, { cwd, timeoutMs, signal }) {
   const run = await runProcess(process.env.AUTOAPPLY_CLAUDE_BIN || 'claude', ['-p', prompt, '--model', model, '--tools', '', '--strict-mcp-config', '--no-session-persistence', '--output-format', 'json', '--max-turns', '1'],
@@ -172,22 +195,30 @@ export async function prescore(root, job, { model, fallback = PRESCORE_FALLBACK,
   const choice = model || process.env.AUTOAPPLY_PRESCORE_MODEL || modelFor(facts, 'prescore');
   if (choice.startsWith('claude-')) return finish(await scoreWithClaude(choice, prompt, { cwd, timeoutMs, signal }));
   if (choice === 'auto' && !hasOpencode()) return finish(await scoreWithClaude(CLAUDE_PRESCORE, prompt, { cwd, timeoutMs, signal }));
-  model = choice === 'auto' ? PRESCORE_MODEL : choice;
+  const auto = choice === 'auto';
+  model = auto ? PRESCORE_MODEL : choice;
+  // 'auto' never ends without a verdict source: with the free model down and no paid
+  // DeepSeek, Claude Haiku reads the JD (text only), still far cheaper than a browser worker.
+  const viaClaude = async () => finish(await scoreWithClaude(CLAUDE_PRESCORE, prompt, { cwd, timeoutMs, signal }));
   let result = null;
   if (!(Date.now() - Date.parse(readBudget(root).free_down_at) < FREE_PAUSE_MS)) {
     result = await scoreWith(model, prompt, { cwd, timeoutMs, signal });
     if (result.verdict || REPLY_ERRORS.has(result.error) || signal?.aborted) return finish(result);
     const before = readBudget(root).free_down_at;
     updateBudget(root, () => ({ free_down_at: new Date().toISOString() }));
-    if (!before) console.log(`Prescore: ${model} failed (${result.error}); pausing it for 2h, using ${fallback} instead.`);
+    if (!before) console.log(`Prescore: ${model} failed (${result.error}); pausing it for 2h, using ${deepseekKey(root) ? fallback : auto ? CLAUDE_PRESCORE : 'nothing'} instead.`);
   }
   const key = deepseekKey(root);
-  if (!key) return finish(result || { model, usage: NO_USAGE, error: 'free_model_paused' });
+  if (!key) return auto ? viaClaude() : finish(result || { model, usage: NO_USAGE, error: 'free_model_paused' });
   // Reserve the paid call before making it, so parallel workers can't overshoot.
   let reserved = false;
   updateBudget(root, b => (reserved = b.paid_calls < maxPaid) ? { paid_calls: b.paid_calls + 1 } : {});
-  if (!reserved) return finish(result || { model: fallback, usage: NO_USAGE, error: 'paid_daily_cap' });
-  result = await scoreWith(fallback, prompt, { cwd, timeoutMs, signal, env: { ...process.env, DEEPSEEK_API_KEY: key } });
+  if (!reserved) return auto ? viaClaude() : finish(result || { model: fallback, usage: NO_USAGE, error: 'paid_daily_cap' });
+  result = fallback.startsWith('deepseek/')
+    ? await scoreWithDeepseek(fallback, prompt, key, { timeoutMs, signal })
+    : await scoreWith(fallback, prompt, { cwd, timeoutMs, signal, env: { ...process.env, DEEPSEEK_API_KEY: key } });
+  // Paid DeepSeek down too: in auto mode Claude Haiku still gives a verdict.
+  if (!result.verdict && auto && !REPLY_ERRORS.has(result.error) && !signal?.aborted) return viaClaude();
   const cost = result.usage?.cli_cost_usd;
   if (cost) updateBudget(root, b => ({ paid_cost_usd: Math.round((b.paid_cost_usd + cost) * 1e6) / 1e6 }));
   return finish(result);
