@@ -76,6 +76,14 @@ MAX_PER_DAY = fact_int("max_emails_per_day", 25)
 FOLLOW_DAYS = fact_int("follow_up_after_days", 5)
 GAP_SECONDS = fact_int("seconds_between_emails", 120)
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[a-z]{2,}$", re.I)
+# Anyone can sign up on these: another address there is another person, not the same company.
+SHARED_MAIL_DOMAINS = {"gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com", "msn.com", "yahoo.com",
+                       "icloud.com", "me.com", "mac.com", "proton.me", "protonmail.com", "pm.me", "aol.com", "fastmail.com",
+                       "hey.com", "gmx.com", "gmx.net", "zoho.com", "yandex.com", "mail.com", "qq.com", "163.com"}
+# The part before the @ of mail no person sent: noreply, careers-no-reply, do_not_reply, notifications+x, ...
+AUTOMATED_SENDER = re.compile(r"no[-_.]?reply|do[-_.]?not[-_.]?reply"
+                              r"|^(notifications?|notify|alerts?|news|newsletters?|marketing|updates|mailer|mailer-daemon"
+                              r"|postmaster|bounces?|auto[-_.]?(reply|responder)|automated)([-_.+]|$)", re.I)
 
 
 def now():
@@ -269,15 +277,21 @@ def norm(s):
     return re.sub(r"[^a-z0-9]", "", str(s).lower())
 
 
-def in_process_companies():
-    """Same rule as autoapply/in-process.mjs: tracker status Responded/Interview/Offer
-    plus `in_process_companies` in apply-facts.yml. The owner is interviewing there, so no follow-ups."""
+def tracker_companies(statuses):
+    """Normalized names of companies whose tracker row has one of these statuses (a regex)."""
     out = set()
     tracker = ROOT / "data" / "applications.md"
     for line in (tracker.read_text().splitlines() if tracker.exists() else []):
         c = [x.strip() for x in line.split("|")]
-        if len(c) > 6 and c[1].isdigit() and re.fullmatch(r"(?i)responded|interview|offer", c[6]):
+        if len(c) > 6 and c[1].isdigit() and re.fullmatch(rf"(?i){statuses}", c[6]):
             out.add(norm(c[3]))
+    return out
+
+
+def in_process_companies():
+    """Same rule as autoapply/in-process.mjs: tracker status Responded/Interview/Offer
+    plus `in_process_companies` in apply-facts.yml. The owner is interviewing there, so no follow-ups."""
+    out = tracker_companies("responded|interview|offer")
     m = re.search(r"^in_process_companies:[ \t]*\[([^\]]*)\]", FACTS, re.M)
     if m:
         names = m.group(1).split(",")
@@ -289,9 +303,21 @@ def in_process_companies():
     return out
 
 
+def contact_keys(d):
+    """Who this row reaches: the address, the company and (unless shared) the mail domain."""
+    to = str(d.get("to_email", "")).lower()
+    domain = to.rpartition("@")[2]
+    return ({to, norm(d.get("company", ""))} | ({domain} if domain not in SHARED_MAIL_DOMAINS else set())) - {""}
+
+
 def cmd_followup(dry):
+    if not dry:
+        cmd_check()  # replies since the day's earlier check; if this fails it raises and nothing is sent
     items = load_all()
-    busy = in_process_companies()
+    busy = in_process_companies() | tracker_companies("rejected|discarded")
+    # One follow-up per person and company, ever: a second row there doesn't earn another, nor does a reply on one.
+    closed = set().union(*(contact_keys(d) for _, d in items if d.get("followup_at") or d.get("replied_at")
+                           or d.get("followup_state") in ("sending", "uncertain")))
     left = MAX_PER_DAY - sent_today(items)
     user, _ = env() if not dry else ("dry-run@example.com", None)
     n = 0
@@ -304,9 +330,12 @@ def cmd_followup(dry):
         if not dry and not allowed(d):
             continue
         if norm(d.get("company", "")) in busy:
-            continue  # already interviewing there: a "just following up" note would look careless
+            continue  # interviewing there, or it's over: a "just following up" note would look careless
+        if contact_keys(d) & closed:
+            continue
         if now() - datetime.fromisoformat(d["sent_at"]) < timedelta(days=FOLLOW_DAYS):
             continue
+        closed |= contact_keys(d)
         body = d.get("followup_body") or (
             f"Hi {d.get('to_name', '').split(' ')[0]},\n\nJust a quick follow-up on my note about the "
             f"{d['role']} role. Happy to share more if useful.\n\nThanks,\n{NAME}")
@@ -340,26 +369,78 @@ def cmd_room():
     print(max(0, MAX_PER_DAY - sent_today(items) - waiting))
 
 
+def mail_folder(im):
+    """Gmail's All Mail, so a reply the owner archived still counts. INBOX when there is none."""
+    typ, rows = im.list()
+    for row in rows if typ == "OK" else []:
+        m = re.search(r'\\All\b.*"([^"]+)"\s*$', row.decode("utf-8", "replace") if isinstance(row, bytes) else "")
+        if m:
+            return f'"{m.group(1)}"'
+    return "INBOX"
+
+
+def search_ids(im, query):
+    typ, data = im.search(None, query)
+    return data[0].split() if typ == "OK" and data and data[0] else []
+
+
+def is_reply(im, mid, domain=None):
+    """Whether this mail's real sender is a person, and on `domain` when one is given.
+    IMAP FROM is a substring match, so read the header: notexample.com is not example.com."""
+    typ, got = im.fetch(mid, "(BODY.PEEK[HEADER.FIELDS (FROM)])")
+    if typ != "OK" or not got or not isinstance(got[0], tuple):
+        return True  # can't tell: a skipped follow-up costs less than one sent after a reply
+    sender = email.utils.parseaddr(got[0][1].decode("utf-8", "replace").partition(":")[2].strip())[1].lower()
+    local, _, found = sender.rpartition("@")
+    if AUTOMATED_SENDER.search(local):
+        return False
+    return domain is None or found == domain or found.endswith("." + domain)
+
+
+def reply_match(im, d, user):
+    """How the recipient's side answered ("thread", "address", "domain"), or None.
+
+    A reply often comes from someone other than the address written to, e.g. a founder
+    answering careers@. Anyone on the same company domain counts: a skipped follow-up
+    costs far less than one sent after a no. Automated senders (AUTOMATED_SENDER) don't."""
+    since = datetime.fromisoformat(d["sent_at"]).strftime("%d-%b-%Y")
+    others = f'NOT FROM "{user}" NOT FROM "mailer-daemon"'  # our own follow-up and bounces carry the thread headers too
+    for sent_id in filter(None, (d.get("message_id"), d.get("followup_message_id"))):
+        for header in ("In-Reply-To", "References"):
+            if any(is_reply(im, mid) for mid in search_ids(im, f'(SINCE {since} HEADER {header} "{sent_id}" {others})')):
+                return "thread"
+    to = d["to_email"].lower()
+    if search_ids(im, f'(SINCE {since} FROM "{to}")'):
+        return "address"
+    domain = to.rpartition("@")[2]
+    if domain in SHARED_MAIL_DOMAINS:
+        return None
+    if any(is_reply(im, mid, domain) for mid in search_ids(im, f'(SINCE {since} FROM "{domain}" {others})')):
+        return "domain"
+    return None
+
+
 def cmd_check():
-    """Mark replies (any mail from the recipient) and bounces (mailer-daemon naming them)."""
+    """Mark replies (see reply_match) and bounces (mailer-daemon naming them)."""
     items = [(p, d) for p, d in load_all() if d.get("sent_at") and not d.get("replied_at") and not d.get("bounced")]
     if not items:
         print("check: nothing to check"); return
     user, pw = env()
     im = imaplib.IMAP4_SSL("imap.gmail.com", timeout=30)
     im.login(user, pw)
-    im.select("INBOX", readonly=True)
-    since = min(datetime.fromisoformat(d["sent_at"]) for _, d in items).strftime("%d-%b-%Y")
+    folder = mail_folder(im)
+    if im.select(folder, readonly=True)[0] != "OK":
+        raise RuntimeError(f"can't open {folder}")
     replies = bounces = 0
     for p, d in items:
         to = d["to_email"]
-        typ, data = im.search(None, f'(SINCE {since} FROM "{to}")')
-        if typ == "OK" and data[0].split():
-            d["replied_at"] = now().isoformat(timespec="seconds"); save(p, d); replies += 1
-            print(f"REPLY  #{d['num']} {d['company']} from {to}")
+        how = reply_match(im, d, user)
+        if how:
+            d["replied_at"] = now().isoformat(timespec="seconds"); d["reply_match"] = how; save(p, d); replies += 1
+            print(f"REPLY  #{d['num']} {d['company']} ({how} match, sent to {to})")
             continue
-        typ, data = im.search(None, f'(SINCE {since} FROM "mailer-daemon" BODY "{to}")')
-        if typ == "OK" and data[0].split():
+        since = datetime.fromisoformat(d["sent_at"]).strftime("%d-%b-%Y")
+        if search_ids(im, f'(SINCE {since} FROM "mailer-daemon" BODY "{to}")'):
             d["bounced"] = True; save(p, d); bounces += 1
             print(f"BOUNCE #{d['num']} {d['company']} {to}")
     im.logout()

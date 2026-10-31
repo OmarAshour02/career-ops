@@ -1,6 +1,7 @@
 """Offline sender regression tests. All SMTP and credentials are mocked."""
 import importlib.util
 import json
+import re
 import tempfile
 import unittest
 from datetime import timedelta
@@ -12,8 +13,55 @@ mail = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mail)
 
 
+class FakeImap:
+    """Just enough of Gmail's IMAP: mail is a list of {"from", "In-Reply-To", "References", "body"}."""
+
+    def __init__(self, mail_list=(), fail_login=False):
+        self.mail, self.fail_login, self.folder = list(mail_list), fail_login, None
+
+    def __call__(self, *_a, **_k):
+        return self
+
+    def login(self, *_a):
+        if self.fail_login:
+            raise OSError("imap down")
+
+    def logout(self):
+        pass
+
+    def list(self):
+        return "OK", [b'(\\HasNoChildren) "/" "INBOX"', b'(\\All \\HasNoChildren) "/" "[Gmail]/All Mail"']
+
+    def select(self, folder, readonly=False):
+        self.folder = folder
+        return "OK", [b"1"]
+
+    def search(self, _charset, query):
+        excluded = re.findall(r'NOT FROM "([^"]+)"', query)
+        query = re.sub(r'NOT FROM "[^"]+"', "", query)
+        wanted = re.findall(r'FROM "([^"]+)"', query)
+        header = re.search(r'HEADER (\S+) "([^"]+)"', query)
+        body = re.search(r'BODY "([^"]+)"', query)
+        hits = []
+        for i, m in enumerate(self.mail, 1):
+            sender = m["from"].lower()
+            if any(x in sender for x in excluded) or not all(w in sender for w in wanted):
+                continue
+            if header and header.group(2) not in m.get(header.group(1), ""):
+                continue
+            if body and body.group(1) not in m.get("body", ""):
+                continue
+            hits.append(str(i))
+        return "OK", [" ".join(hits).encode()]
+
+    def fetch(self, mid, _spec):
+        return "OK", [(b"header", f'From: {self.mail[int(mid) - 1]["from"]}\r\n\r\n'.encode()), b")"]
+
+
 class MailTests(unittest.TestCase):
     def setUp(self):
+        self.imap = FakeImap()
+        p = patch.object(mail.imaplib, "IMAP4_SSL", self.imap); p.start(); self.addCleanup(p.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         root = Path(self.temp.name)
@@ -111,6 +159,138 @@ class MailTests(unittest.TestCase):
         with patch.object(mail, "FACTS", mail.FACTS + "in_process_companies: [ Google, Example ] # note\n"), patch.object(mail, "smtp_send") as smtp:
             mail.cmd_followup(False)
             smtp.assert_not_called()
+
+    def due_for_followup(self, to_email="careers@example.com"):
+        self.row.update(to_email=to_email, sent_at=(mail.now() - timedelta(days=10)).isoformat(), message_id="<old@example.com>")
+        mail.save(self.path, self.row)
+
+    def followups_sent(self):
+        with patch.object(mail, "smtp_send") as smtp:
+            mail.cmd_followup(False)
+        return smtp.call_count
+
+    def test_colleague_on_same_domain_counts_as_reply(self):
+        self.due_for_followup()
+        self.imap.mail = [{"from": "Founder <founder@example.com>"}]
+        self.assertEqual(self.followups_sent(), 0)
+        self.assertEqual(self.read()["reply_match"], "domain")
+        self.assertTrue(self.read()["replied_at"])
+
+    def test_subdomain_counts_but_lookalike_domain_does_not(self):
+        self.due_for_followup()
+        self.imap.mail = [{"from": "Spam <a@notexample.com>"}, {"from": "a@example.com.evil.net"}]
+        self.assertEqual(self.followups_sent(), 1)
+        self.assertNotIn("replied_at", self.read())
+        self.row = self.read(); self.row.pop("followup_at"); self.row.pop("followup_state"); mail.save(self.path, self.row)
+        self.imap.mail = [{"from": "Jobs <jobs@mail.example.com>"}]
+        self.assertEqual(self.followups_sent(), 0)
+
+    def test_stranger_on_shared_mail_provider_is_not_a_reply(self):
+        self.due_for_followup("founder@gmail.com")
+        self.imap.mail = [{"from": "Someone Else <other@gmail.com>"}]
+        self.assertEqual(self.followups_sent(), 1)
+
+    def test_reply_in_thread_from_any_address_counts(self):
+        self.due_for_followup()
+        self.imap.mail = [{"from": "Personal <someone@gmail.com>", "In-Reply-To": "<old@example.com>"}]
+        self.assertEqual(self.followups_sent(), 0)
+        self.assertEqual(self.read()["reply_match"], "thread")
+
+    def test_own_mail_and_bounces_in_the_thread_are_not_replies(self):
+        self.due_for_followup()
+        self.imap.mail = [{"from": "sender@example.com", "References": "<old@example.com>"},
+                          {"from": "mailer-daemon@googlemail.com", "References": "<old@example.com>", "body": "careers@example.com"}]
+        self.assertEqual(self.followups_sent(), 0)
+        self.assertNotIn("replied_at", self.read())
+        self.assertTrue(self.read()["bounced"])
+
+    def test_archived_replies_are_seen(self):
+        self.due_for_followup()
+        self.followups_sent()
+        self.assertEqual(self.imap.folder, '"[Gmail]/All Mail"')
+
+    def test_no_followups_when_reply_check_fails(self):
+        self.due_for_followup()
+        self.imap.fail_login = True
+        with patch.object(mail, "smtp_send") as smtp:
+            with self.assertRaises(OSError):
+                mail.cmd_followup(False)
+            smtp.assert_not_called()
+
+    def test_no_followup_after_rejected_or_discarded_row(self):
+        for status in ("Rejected", "Discarded"):
+            self.due_for_followup()
+            (self.root / "data").mkdir(exist_ok=True)
+            (self.root / "data" / "applications.md").write_text(f"| 1 | 2026-10-01 | Example | Engineer | 3/5 | {status} | ✅ | | |\n")
+            self.assertEqual(self.followups_sent(), 0, status)
+
+    def test_automated_senders_are_not_replies(self):
+        for sender in ("noreply", "no-reply", "no_reply", "no.reply", "NoReply", "donotreply", "do-not-reply", "careers-noreply",
+                       "no-reply+abc", "notifications", "notification-jobs", "alerts", "mailer", "bounces", "auto-reply", "autoresponder"):
+            with self.subTest(sender):
+                self.imap.mail = [{"from": f"Example Hiring <{sender}@example.com>", "In-Reply-To": "<old@example.com>"}]
+                self.assertIsNone(mail.reply_match(self.imap, {"sent_at": mail.now().isoformat(), "message_id": "<old@example.com>", "to_email": "careers@example.com"}, "sender@example.com"))
+
+    def test_people_with_similar_addresses_still_count(self):
+        for sender in ("noah", "newsom", "alerta", "jobs", "recruiting", "nora.reply", "automation-lead", "updatesmith"):
+            with self.subTest(sender):
+                self.imap.mail = [{"from": f"{sender}@example.com"}]
+                self.assertEqual(mail.reply_match(self.imap, {"sent_at": mail.now().isoformat(), "to_email": "careers@example.com"}, "sender@example.com"), "domain")
+
+    def test_noreply_mail_leaves_the_followup_due(self):
+        self.due_for_followup()
+        self.imap.mail = [{"from": "No Reply <noreply@example.com>"}]
+        self.assertEqual(self.followups_sent(), 1)
+        self.assertNotIn("replied_at", self.read())
+
+    def test_person_next_to_noreply_mail_still_counts(self):
+        self.due_for_followup()
+        self.imap.mail = [{"from": "noreply@example.com"}, {"from": "founder@example.com"}]
+        self.assertEqual(self.followups_sent(), 0)
+        self.assertEqual(self.read()["reply_match"], "domain")
+
+    def second_row(self, **fields):
+        other = {**self.read(), "num": "002", **fields}
+        for key in ("followup_at", "followup_state", "followup_sending_at", "followup_message_id"):
+            other.pop(key, None)
+        path = self.out / "002.json"
+        mail.save(path, other)
+        return path
+
+    def test_repeat_runs_send_one_followup(self):
+        self.due_for_followup()
+        self.assertEqual(self.followups_sent(), 1)
+        self.assertEqual(self.followups_sent(), 0)
+
+    def test_one_followup_per_company_across_rows(self):
+        self.due_for_followup()
+        self.second_row(to_email="other@elsewhere.com")
+        self.assertEqual(self.followups_sent(), 1)
+        self.assertEqual(self.followups_sent(), 0)
+
+    def test_one_followup_per_domain_and_address_across_rows(self):
+        self.due_for_followup()
+        self.second_row(company="Renamed Inc", to_email="other@example.com")
+        self.assertEqual(self.followups_sent(), 1)
+        self.second_row(company="Third Inc", to_email="careers@example.com", num="003")
+        self.assertEqual(self.followups_sent(), 0)
+
+    def test_failed_followup_blocks_the_rest_of_the_company(self):
+        self.due_for_followup()
+        self.row.update(followup_state="uncertain"); mail.save(self.path, self.row)
+        self.second_row(to_email="other@example.com")
+        self.assertEqual(self.followups_sent(), 0)
+
+    def test_reply_on_one_row_stops_followups_on_the_other(self):
+        self.due_for_followup()
+        self.row.update(replied_at=mail.now().isoformat()); mail.save(self.path, self.row)
+        self.second_row(to_email="other@elsewhere.com")
+        self.assertEqual(self.followups_sent(), 0)
+
+    def test_different_people_on_a_shared_provider_each_get_one(self):
+        self.due_for_followup("a@gmail.com")
+        self.second_row(company="Other", to_email="b@gmail.com")
+        self.assertEqual(self.followups_sent(), 2)
 
     def test_overlapping_mail_operations_are_rejected(self):
         with mail.mail_lock():
